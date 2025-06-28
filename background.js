@@ -13,22 +13,52 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 // Add a listener for when a context menu item is clicked
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     // Check if the clicked item is our "createAnkiCard" item
     if (info.menuItemId === "createAnkiCard") {
-        const selectedText = info.selectionText; // Get the text that was selected
+        const selectedText = info.selectionText; // Get the text that was initially selected
 
-        console.log("Context menu clicked! Selected text:", selectedText);
+        console.log("Context menu clicked! Initial selected text:", selectedText);
 
-        // Send a message to the active tab's content script
-        // This content script will then display a message on the webpage
+        // First, send a message to the content script to get the full context sentence
+        // We use await because sendMessage returns a Promise in Manifest V3
+        let response;
+        try {
+            response = await chrome.tabs.sendMessage(tab.id, { action: "getWordAndContext" });
+        } catch (error) {
+            console.error("Error sending message to content script:", error);
+            chrome.tabs.sendMessage(tab.id, {
+                action: "displayInfo",
+                data: `Error getting context. Please try again.`
+            });
+            return; // Stop execution if content script communication fails
+        }
+        
+        const wordToDefine = response.selectedText;
+        const contextSentence = response.contextSentence;
+
+        console.log("Received from content script - Word:", wordToDefine);
+        console.log("Received from content script - Context:", contextSentence);
+
+        // Display a temporary message on the page while processing
         chrome.tabs.sendMessage(tab.id, {
             action: "displayInfo",
-            data: `Selected: "${selectedText}". Getting definition and preparing Anki card...`
+            data: `Selected: "${wordToDefine}". Fetching definition...`
         });
 
-        // In the next steps, this is where you would:
-        // 1. Fetch the definition and context using an external API.
-        // 2. Send that data to your local Python server (which then calls AnkiConnect).
+        // --- Next Step: Integrate Dictionary API here ---
+        // For now, we'll just log a placeholder
+        const definition = `Definition of "${wordToDefine}" (API call will go here)`;
+        const translatedContext = `Translation of "${contextSentence}" (API call will go here)`;
+
+        console.log("Placeholder Definition:", definition);
+        console.log("Placeholder Translated Context:", translatedContext);
+        
+        // --- Next Step: Send to Anki (via Python backend) here ---
+        // For now, just a final message
+        chrome.tabs.sendMessage(tab.id, {
+            action: "displayInfo",
+            data: `Processed: "${wordToDefine}". Ready for Anki!`
+        });
     }
 });

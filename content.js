@@ -3,17 +3,70 @@ console.log("Glossari content script loaded!");
 
 // Listener for messages from the background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // Check if the message is to display information on the page
-    if (request.action === "displayInfo") {
+    // If the message is to get selected text and its context
+    if (request.action === "getWordAndContext") {
+        const selection = window.getSelection();
+        const selectedText = selection.toString();
+        let contextSentence = "";
+
+        if (selectedText.length > 0) {
+            // Attempt to find the full sentence containing the selection
+            const range = selection.getRangeAt(0); // Get the first range of the selection
+            const commonAncestor = range.commonAncestorContainer; // The deepest common ancestor node
+
+            // Try to find the parent text node or element containing the text
+            let textContainer = commonAncestor;
+            // Traverse up until we find a block-level element or a major text container
+            while (textContainer && textContainer.nodeType !== Node.ELEMENT_NODE && textContainer.parentNode) {
+                textContainer = textContainer.parentNode;
+            }
+            if (!textContainer || textContainer.nodeType !== Node.ELEMENT_NODE) {
+                textContainer = document.body; // Fallback to body if no clear container found
+            }
+            
+            const fullText = textContainer.textContent || ''; // Get all text content from the container
+
+            // Basic sentence segmentation using regex (can be improved with NLP for accuracy)
+            // This regex tries to find sentences ending with . ! ? followed by a space or end of string
+            const sentences = fullText.match(/[^.!?]+[.!?]|\S+/g) || [];
+            
+            // Find the sentence that contains the selected text
+            for (const sentence of sentences) {
+                if (sentence.includes(selectedText)) {
+                    contextSentence = sentence.trim();
+                    break;
+                }
+            }
+
+            // Fallback if no specific sentence found, take a snippet
+            if (!contextSentence && fullText.includes(selectedText)) {
+                const startIndex = fullText.indexOf(selectedText);
+                const endIndex = startIndex + selectedText.length;
+                // Take a larger chunk if exact sentence not found
+                contextSentence = fullText.substring(Math.max(0, startIndex - 50), Math.min(fullText.length, endIndex + 50)).trim();
+                if (contextSentence.length > 0 && (startIndex - 50) > 0) {
+                    contextSentence = "..." + contextSentence; // Add ellipsis if not start of text
+                }
+                if (contextSentence.length > 0 && (endIndex + 50) < fullText.length) {
+                    contextSentence = contextSentence + "..."; // Add ellipsis if not end of text
+                }
+            }
+        }
+
+        // Send the selected text and its context back to the background script
+        sendResponse({ 
+            selectedText: selectedText, 
+            contextSentence: contextSentence 
+        });
+    } else if (request.action === "displayInfo") {
+        // Existing logic to display messages on the page
         const infoMessage = request.data;
         
-        // Find or create a div to display messages on the page
-        let vocabAnchorDisplay = document.getElementById('vocab-anchor-display');
-        if (!vocabAnchorDisplay) {
-            vocabAnchorDisplay = document.createElement('div');
-            vocabAnchorDisplay.id = 'vocab-anchor-display';
-            // Basic styling for the display box
-            Object.assign(vocabAnchorDisplay.style, {
+        let glossariDisplay = document.getElementById('glossari-display');
+        if (!glossariDisplay) {
+            glossariDisplay = document.createElement('div');
+            glossariDisplay.id = 'glossari-display';
+            Object.assign(glossariDisplay.style, {
                 position: 'fixed',
                 bottom: '20px',
                 right: '20px',
@@ -22,25 +75,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 padding: '10px',
                 borderRadius: '8px',
                 boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
-                zIndex: '99999', // Ensure it's on top of other content
+                zIndex: '99999',
                 maxWidth: '300px',
-                fontFamily: 'Inter, sans-serif', // Use Inter or fallback to sans-serif
+                fontFamily: 'Inter, sans-serif',
                 fontSize: '14px',
                 color: '#333'
             });
-            document.body.appendChild(vocabAnchorDisplay);
+            document.body.appendChild(glossariDisplay);
         }
         
-        vocabAnchorDisplay.textContent = infoMessage;
+        glossariDisplay.textContent = infoMessage;
 
-        // Optionally, make it disappear after a few seconds
         setTimeout(() => {
-            if (vocabAnchorDisplay) {
-                vocabAnchorDisplay.remove();
+            if (glossariDisplay) {
+                glossariDisplay.remove();
             }
-        }, 5000); // Remove after 5 seconds
+        }, 5000);
     }
 });
-
-// We will add more logic here later for getting the selected text directly
-// (e.g., when you right-click on text)
