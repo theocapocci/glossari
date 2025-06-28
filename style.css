@@ -1,0 +1,40 @@
+/* Basic styles for the extension popup */
+body {
+    width: 250px; /* Fixed width for the popup */
+    height: auto; /* Adjust height based on content */
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif; /* Use Inter font */
+    overflow-x: hidden; /* Prevent horizontal scroll */
+}
+
+/* Tailwind base styles (for preview, ensure this is handled by immersive rendering) */
+/* If running locally in browser, ensure Tailwind CDN is linked in popup.html */
+
+/* Basic reset/base for better consistency */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+body {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+input, button, textarea, select {
+  font: inherit;
+}
+p, h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+}
+#root, #__next {
+  isolation: isolate;
+}
+
+/* Specific styles for elements injected by content.js */
+#vocab-anchor-display {
+    /* Styles are mostly inline in content.js for simplicity in this example,
+       but you could move them here for better organization. */
+}
