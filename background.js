@@ -1,5 +1,5 @@
 // Log a message to the console to confirm the background script is loaded
-console.log("Vocab Anchor background service worker loaded!");
+console.log("Glossari background service worker loaded!");
 
 // Add a listener that runs when the extension is first installed or updated
 chrome.runtime.onInstalled.addListener(() => {

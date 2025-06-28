@@ -34,7 +34,7 @@ p, h1, h2, h3, h4, h5, h6 {
 }
 
 /* Specific styles for elements injected by content.js */
-#vocab-anchor-display {
+#glossari-display {
     /* Styles are mostly inline in content.js for simplicity in this example,
        but you could move them here for better organization. */
 }

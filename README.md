@@ -2,7 +2,7 @@
 Glossari is intended to be a browser extension designed to assist vocabulary acquisition by letting you learn words directly in their natural context. A-contextual, rote learning is neither optimal nor necessary. Glossari will be an alternative to less stimulating, less effective methods of vocabulary building. 
 
 ✨ Features
-1. Contextual Definition on Demand: Select any word on a webpage, and Vocab Anchor will provide its definition, clearly showing it within the original sentence or phrase where it appeared. Understand meaning and usage instantly.
+1. Contextual Definition on Demand: Select any word on a webpage, and Glossari will provide its definition, clearly showing it within the original sentence or phrase where it appeared. Understand meaning and usage instantly.
 
 2. Intelligent Text Selection: Our extension efficiently identifies and extracts the exact word you highlight, along with its surrounding sentence for rich contextual understanding.
 

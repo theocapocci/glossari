@@ -1,5 +1,5 @@
 // Log a message to the console to confirm the content script is loaded
-console.log("Vocab Anchor content script loaded!");
+console.log("Glossari content script loaded!");
 
 // Listener for messages from the background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
