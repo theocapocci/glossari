@@ -4,6 +4,45 @@
     <title>Glossari</title>
     <!-- Link to the new popup-specific stylesheet -->
     <link rel="stylesheet" href="popup_style.css"> 
+    
+    <!-- EMBEDDED TAILWIND CSS FOR CSP COMPLIANCE -->
+    <!-- This replaces the CDN script tag that caused the CSP error. -->
+    <style>
+        /* This is a basic Tailwind setup. For full Tailwind functionality without the CDN script,
+           you would typically set up a build process (e.g., using PostCSS) to generate a
+           compiled CSS file from your Tailwind configuration.
+           This serves as a quick fix for the CSP error. */
+        
+        .bg-gray-100 { background-color: #f3f4f6; }
+        .p-4 { padding: 1rem; }
+        .rounded-lg { border-radius: 0.5rem; }
+        .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        .font-sans { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; }
+        .text-gray-800 { color: #1f2937; }
+        .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+        .font-bold { font-weight: 700; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .text-indigo-700 { color: #4338ca; }
+        .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+        .text-gray-600 { color: #4b5563; }
+        .mb-4 { margin-bottom: 1rem; }
+        .w-full { width: 100%; }
+        .bg-indigo-500 { background-color: #6366f1; }
+        .hover\:bg-indigo-600:hover { background-color: #4f46e5; }
+        .text-white { color: #fff; }
+        .font-semibold { font-weight: 600; }
+        .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+        .px-4 { padding-left: 1rem; padding-right: 1rem; }
+        .rounded-md { border-radius: 0.375rem; }
+        .transition { transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter; }
+        .duration-300 { transition-duration: 0.3s; }
+        .ease-in-out { transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+        .shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        .mt-4 { margin-top: 1rem; }
+        .text-xs { font-size: 0.75rem; line-height: 1rem; }
+        .text-gray-700 { color: #374151; }
+        .italic { font-style: italic; }
+    </style>
 </head>
 <body class="bg-gray-100 p-4 rounded-lg shadow-lg font-sans text-gray-800">
     <h1 class="text-xl font-bold mb-2 text-indigo-700">Glossari</h1>
@@ -16,7 +55,8 @@
     <div id="status" class="mt-4 text-xs text-gray-700 italic"></div>
 
     <script src="popup.js"></script>
-    <!-- Tailwind CSS for styling (will be loaded from CDN) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- REMOVED: The following script tag was causing the CSP error. 
+         Its functionality is replaced by the inline <style> block above. -->
+    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
 </body>
 </html>
