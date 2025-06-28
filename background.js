@@ -27,15 +27,36 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             response = await chrome.tabs.sendMessage(tab.id, { action: "getWordAndContext" });
         } catch (error) {
             console.error("Error sending message to content script:", error);
+            // Display error to the user on the webpage
             chrome.tabs.sendMessage(tab.id, {
                 action: "displayInfo",
-                data: `Error getting context. Please try again.`
+                data: `Glossari: Error communicating with webpage.`
             });
             return; // Stop execution if content script communication fails
         }
         
+        // --- CRUCIAL FIX: Check if response is valid ---
+        if (!response || typeof response.selectedText === 'undefined' || typeof response.contextSentence === 'undefined') {
+            console.error("Invalid response from content script:", response);
+            chrome.tabs.sendMessage(tab.id, {
+                action: "displayInfo",
+                data: `Glossari: Could not get valid text context. Please ensure text is selected.`
+            });
+            return; // Stop execution if response is invalid
+        }
+
         const wordToDefine = response.selectedText;
         const contextSentence = response.contextSentence;
+
+        // Handle case where no text was actually selected (e.g., right-click on whitespace)
+        if (!wordToDefine.trim()) {
+            console.warn("No text selected by content script after right-click.");
+            chrome.tabs.sendMessage(tab.id, {
+                action: "displayInfo",
+                data: `Glossari: No text was selected.`
+            });
+            return;
+        }
 
         console.log("Received from content script - Word:", wordToDefine);
         console.log("Received from content script - Context:", contextSentence);

@@ -3,10 +3,11 @@ console.log("Glossari content script loaded!");
 
 // Listener for messages from the background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // If the message is to get selected text and its context
+    // IMPORTANT: Always return true from the listener if sendResponse will be called,
+    // even if it's called synchronously. This tells Chrome to keep the message channel open.
     if (request.action === "getWordAndContext") {
         const selection = window.getSelection();
-        const selectedText = selection.toString();
+        const selectedText = selection.toString(); // Get the selected text from the browser's selection
         let contextSentence = "";
 
         if (selectedText.length > 0) {
@@ -53,18 +54,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }
         }
 
-        // Send the selected text and its context back to the background script
+        // Always send a response, even if selectedText or contextSentence are empty
         sendResponse({ 
             selectedText: selectedText, 
             contextSentence: contextSentence 
         });
+        return true; // Important: Indicate that sendResponse will be called.
     } else if (request.action === "displayInfo") {
         // Existing logic to display messages on the page
         const infoMessage = request.data;
         
         let glossariDisplay = document.getElementById('glossari-display');
         if (!glossariDisplay) {
-            glossariDisplay = document.createElement('div');
+            glSossariDisplay = document.createElement('div');
             glossariDisplay.id = 'glossari-display';
             Object.assign(glossariDisplay.style, {
                 position: 'fixed',
