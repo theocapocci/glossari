@@ -20,11 +20,49 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
         console.log("Context menu clicked! Selected text:", selectedText);
 
-        // Send a message to the active tab's content script
-        // This content script will then display a message on the webpage
-        chrome.tabs.sendMessage(tab.id, {
-            action: "displayInfo",
-            data: `Selected: "${selectedText}". Getting definition and preparing Anki card...`
+        // Use chrome.scripting.executeScript to directly inject and run the display logic
+        // This ensures the code runs in the tab's context when needed, avoiding connection errors.
+        chrome.scripting.executeScript({
+            target: { tabId: tab.id }, // Target the current tab
+            function: (messageToDisplay) => {
+                // This function contains the logic to display the message on the webpage.
+                // It is self-contained and will run directly in the content script's environment.
+                let GlossariDisplay = document.getElementById('glossari-display');
+                if (!GlossariDisplay) {
+                    GlossariDisplay = document.createElement('div');
+                    GlossariDisplay.id = 'glossari-display';
+                    Object.assign(GlossariDisplay.style, {
+                        position: 'fixed',
+                        bottom: '20px',
+                        right: '20px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        border: '1px solid #ccc',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+                        zIndex: '99999',
+                        maxWidth: '300px',
+                        fontFamily: 'Inter, sans-serif',
+                        fontSize: '14px',
+                        color: '#333'
+                    });
+                    document.body.appendChild(GlossariDisplay);
+                }
+                
+                GlossariDisplay.textContent = messageToDisplay;
+
+                setTimeout(() => {
+                    if (GlossariDisplay) {
+                        GlossariDisplay.remove();
+                    }
+                }, 5000); // Remove after 5 seconds
+            },
+            args: [`Selected: "${selectedText}". Getting definition and preparing Anki card...`] // Pass the selected text as an argument to the injected function
+        }, () => {
+            // Callback to handle any errors during script execution
+            if (chrome.runtime.lastError) {
+                console.error("Error executing script in tab:", chrome.runtime.lastError.message);
+            }
         });
 
         // In the next steps, this is where you would:
@@ -39,23 +77,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Check if the message is specifically for sending selected text to Anki
     if (request.action === "sendSelectedTextToAnki") {
         console.log("Message received from popup: sendSelectedTextToAnki");
-
-        // Here you would implement the actual logic for Anki integration:
-        // 1. Potentially get the selected text from the active tab if it wasn't
-        //    already passed in the message from the popup (e.g., if the popup
-        //    needs to trigger processing of *currently* selected text on the page).
-        //    For example:
-        //    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        //        const activeTab = tabs[0];
-        //        chrome.tabs.sendMessage(activeTab.id, { action: "getSelectedText" }, (response) => {
-        //            if (response && response.selectedText) {
-        //                console.log("Selected text from tab:", response.selectedText);
-        //                // Now you can use response.selectedText for Anki
-        //                // For now, let's just use a placeholder
-        //                // sendToAnkiLogic(response.selectedText);
-        //            }
-        //        });
-        //    });
 
         // For now, we'll just send a success response back to the popup.
         // In a real scenario, you'd perform the Anki API call here
