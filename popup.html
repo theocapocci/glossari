@@ -2,18 +2,17 @@
 <html>
 <head>
     <title>Glossari</title>
-    <link rel="stylesheet" href="style.css">
+    <!-- Link to the new popup-specific stylesheet -->
+    <link rel="stylesheet" href="popup_style.css"> 
 </head>
 <body class="bg-gray-100 p-4 rounded-lg shadow-lg font-sans text-gray-800">
     <h1 class="text-xl font-bold mb-2 text-indigo-700">Glossari</h1>
     <p class="text-sm text-gray-600 mb-4">Select text on any webpage, then right-click!</p>
     
-    <!-- This button is just a placeholder for now to show interaction -->
     <button id="ankiBtn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md transition duration-300 ease-in-out shadow-md">
         Send to Anki (Dev)
     </button>
     
-    <!-- Area to display status messages from the popup script -->
     <div id="status" class="mt-4 text-xs text-gray-700 italic"></div>
 
     <script src="popup.js"></script>

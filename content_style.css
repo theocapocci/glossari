@@ -1,0 +1,27 @@
+    /*
+     * This CSS is injected into every webpage.
+     * ONLY put styles here that are specifically for elements
+     * that your 'content.js' script creates and injects into the page.
+     * DO NOT include global body, html, or common element resets here
+     * unless they are carefully scoped to your injected elements.
+     */
+
+    #glossari-display {
+        /* Styles for the message display box will go here.
+           Currently, they are set inline in content.js for simplicity,
+           but you could move them here. */
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Example of a more specific style for elements your extension creates: */
+    .glossari-tooltip {
+        /* Styles for a potential tooltip or inline definition display */
+        position: absolute;
+        background-color: #fff;
+        border: 1px solid #ddd;
+        padding: 5px;
+        border-radius: 4px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        z-index: 100000;
+    }
+    

@@ -1,4 +1,8 @@
-/* Basic styles for the extension popup */
+/*
+ * This CSS is ONLY for the extension's popup.html.
+ * It defines the layout and appearance of the popup window.
+ */
+
 body {
     width: 250px; /* Fixed width for the popup */
     height: auto; /* Adjust height based on content */
@@ -11,7 +15,7 @@ body {
 /* Tailwind base styles (for preview, ensure this is handled by immersive rendering) */
 /* If running locally in browser, ensure Tailwind CDN is linked in popup.html */
 
-/* Basic reset/base for better consistency */
+/* Basic reset/base for better consistency within the popup */
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -31,10 +35,4 @@ p, h1, h2, h3, h4, h5, h6 {
 }
 #root, #__next {
   isolation: isolate;
-}
-
-/* Specific styles for elements injected by content.js */
-#glossari-display {
-    /* Styles are mostly inline in content.js for simplicity in this example,
-       but you could move them here for better organization. */
 }
