@@ -4,13 +4,14 @@
   "version": "1.0",
   "description": "Select text to get definitions and create Anki flashcards.",
   "permissions": [
-    "activeTab",    
-    "scripting",    
-    "contextMenus", 
-    "storage"       
+    "activeTab",
+    "scripting",
+    "contextMenus",
+    "storage"
   ],
   "host_permissions": [
-    "<all_urls>"    
+    "<all_urls>",
+    "https://api.dictionaryapi.dev/"
   ],
   "background": {
     "service_worker": "background.js"
