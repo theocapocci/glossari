@@ -8,12 +8,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const infoMessage = request.data;
         
         // Find or create a div to display messages on the page
-        let vocabAnchorDisplay = document.getElementById('vocab-anchor-display');
-        if (!vocabAnchorDisplay) {
-            vocabAnchorDisplay = document.createElement('div');
-            vocabAnchorDisplay.id = 'vocab-anchor-display';
+        let GlossariDisplay = document.getElementById('glossari-display');
+        if (!GlossariDisplay) {
+            GlossariDisplay = document.createElement('div');
+            GlossariDisplay.id = 'glossari-display';
             // Basic styling for the display box
-            Object.assign(vocabAnchorDisplay.style, {
+            Object.assign(GlossariDisplay.style, {
                 position: 'fixed',
                 bottom: '20px',
                 right: '20px',
@@ -28,15 +28,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 fontSize: '14px',
                 color: '#333'
             });
-            document.body.appendChild(vocabAnchorDisplay);
+            document.body.appendChild(GlossariDisplay);
         }
         
-        vocabAnchorDisplay.textContent = infoMessage;
+        GlossariDisplay.textContent = infoMessage;
 
         // Optionally, make it disappear after a few seconds
         setTimeout(() => {
-            if (vocabAnchorDisplay) {
-                vocabAnchorDisplay.remove();
+            if (GlossariDisplay) {
+                GlossariDisplay.remove();
             }
         }, 5000); // Remove after 5 seconds
     }

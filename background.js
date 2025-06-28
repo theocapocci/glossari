@@ -32,3 +32,38 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         // 2. Send that data to your local Python server (which then calls AnkiConnect).
     }
 });
+
+// Add a listener for messages from other parts of the extension (e.g., popup.js)
+// This listener handles messages sent *to* the background script.
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // Check if the message is specifically for sending selected text to Anki
+    if (request.action === "sendSelectedTextToAnki") {
+        console.log("Message received from popup: sendSelectedTextToAnki");
+
+        // Here you would implement the actual logic for Anki integration:
+        // 1. Potentially get the selected text from the active tab if it wasn't
+        //    already passed in the message from the popup (e.g., if the popup
+        //    needs to trigger processing of *currently* selected text on the page).
+        //    For example:
+        //    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        //        const activeTab = tabs[0];
+        //        chrome.tabs.sendMessage(activeTab.id, { action: "getSelectedText" }, (response) => {
+        //            if (response && response.selectedText) {
+        //                console.log("Selected text from tab:", response.selectedText);
+        //                // Now you can use response.selectedText for Anki
+        //                // For now, let's just use a placeholder
+        //                // sendToAnkiLogic(response.selectedText);
+        //            }
+        //        });
+        //    });
+
+        // For now, we'll just send a success response back to the popup.
+        // In a real scenario, you'd perform the Anki API call here
+        // and send back success/failure based on that.
+        sendResponse({ success: true, message: "Message received! Anki logic pending." });
+
+        // IMPORTANT: Return true to indicate that you want to send a response asynchronously.
+        // If you don't return true, the sendResponse callback will not work.
+        return true;
+    }
+});
