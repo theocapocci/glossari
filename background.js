@@ -18,37 +18,39 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         const selectedText = info.selectionText.trim();
         
         if (!selectedText) {
-            return; // Exit if no text is selected
+            return; // Exit silently if no text is selected
         }
 
         try {
-            const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${selectedText}`);
-            // IMPORTANT: Always parse the JSON body first. It contains the real error message.
+            // Define the language pair for the translation (e.g., 'en|fr' for English to French)
+            const langPair = 'fr|en';
+            
+            // Construct the API URL
+            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(selectedText)}&langpair=${langPair}`;
+
+            const response = await fetch(url);
             const data = await response.json();
 
-            // Now, check if the HTTP request was successful.
-            if (!response.ok) {
-                // If the API gave us a specific error title (like "No Definitions Found"), use that.
-                const errorMessage = data.title || `API Error: ${response.status}`;
-                throw new Error(errorMessage);
+            // Check if the API returned a successful translation
+            if (data.responseStatus !== 200) {
+                throw new Error(data.responseDetails);
             }
 
-            const definition = data[0]?.meanings[0]?.definitions[0]?.definition;
-            const phonetic = data[0]?.phonetic || '';
+            // Extract the primary translation
+            const definition = data.responseData.translatedText;
 
-            if (!definition) {
-                throw new Error("Could not find a valid definition in the API response.");
+            if (!definition || definition.toLowerCase() === selectedText.toLowerCase()) {
+                 throw new Error(`No definition found for "${selectedText}"`);
             }
 
             // Inject the successful result into the page.
             chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 function: displayResultOnPage,
-                args: [selectedText, phonetic, definition]
+                args: [selectedText, 'Translation', definition] // Using 'Translation' for the phonetic field
             });
 
         } catch (error) {
-            // This will now catch the correct, user-friendly error message.
             console.error("Glossari Error:", error.message);
             
             chrome.scripting.executeScript({
@@ -60,7 +62,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
 });
 
-// Rename the injected function for clarity
+// This function is injected into the webpage to display the result.
 function displayResultOnPage(word, phonetic, text) {
     let glossariDisplay = document.getElementById('glossari-display');
     if (glossariDisplay) {

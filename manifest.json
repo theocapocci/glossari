@@ -11,8 +11,8 @@
   ],
   "host_permissions": [
     "<all_urls>",
-    "https://api.dictionaryapi.dev/"
-  ],
+    "https://api.mymemory.translated.net/"
+],
   "background": {
     "service_worker": "background.js"
   },
