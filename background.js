@@ -420,8 +420,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             let promptParts = [];
             
             // Add AI Persona/Identity
-            promptParts.push("You are a highly knowledgeable translator, specialized in using contextual information to make inferences about the meaning of linguistic expressions. Your task is provide concise explanations of linguistic expressions.");
-            
+            promptParts.push("You are a highly knowledgeable language learning assistant, specialized in using contextual information to make inferences about the meaning of linguistic expressions. Your task is provide concise explanations of linguistic expressions that will be helpful for language learners.");
+        
             // Start the main request directly
             promptParts.push(`For the linguistic item: "${selectedText}",`);
             
