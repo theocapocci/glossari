@@ -54,3 +54,25 @@
     padding: 12px;
     line-height: 1.6;
 }
+
+/* --- New styles for list indentation --- */
+#glossari-display ul,
+#glossari-display ol {
+    margin-left: 1.25rem; /* Standard indentation */
+    padding-left: 0; /* Browsers often use padding, but we'll use margin for consistent indentation */
+    list-style-position: outside; /* Ensures bullets/numbers are outside the content */
+    margin-bottom: 0.5rem; /* Add some space between lists and other elements */
+}
+
+#glossari-display ul {
+    list-style-type: disc; /* Default bullet for unordered lists */
+}
+
+#glossari-display ol {
+    list-style-type: decimal; /* Default numbering for ordered lists */
+}
+
+#glossari-display li {
+    margin-bottom: 0.25rem; /* Space between list items */
+}
+/* --- End new styles for list indentation --- */

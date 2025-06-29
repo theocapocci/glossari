@@ -6,13 +6,7 @@
     <link rel="stylesheet" href="popup_style.css"> 
     
     <!-- EMBEDDED TAILWIND CSS FOR CSP COMPLIANCE -->
-    <!-- This replaces the CDN script tag that caused the CSP error. -->
     <style>
-        /* This is a basic Tailwind setup. For full Tailwind functionality without the CDN script,
-           you would typically set up a build process (e.g., using PostCSS) to generate a
-           compiled CSS file from your Tailwind configuration.
-           This serves as a quick fix for the CSP error. */
-        
         .bg-gray-100 { background-color: #f3f4f6; }
         .p-4 { padding: 1rem; }
         .rounded-lg { border-radius: 0.5rem; }
@@ -42,6 +36,24 @@
         .text-xs { font-size: 0.75rem; line-height: 1rem; }
         .text-gray-700 { color: #374151; }
         .italic { font-style: italic; }
+        /* Added for API Key Input */
+        .block { display: block; }
+        .text-gray-700 { color: #374151; }
+        .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+        .font-medium { font-weight: 500; }
+        .mb-1 { margin-bottom: 0.25rem; }
+        .appearance-none { appearance: none; }
+        .border { border-width: 1px; }
+        .border-gray-300 { border-color: #d1d5db; }
+        .focus\:outline-none:focus { outline: 2px solid transparent; outline-offset: 2px; }
+        .focus\:ring-2:focus { box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5); }
+        .focus\:ring-indigo-500:focus { border-color: #6366f1; }
+        .focus\:border-indigo-500:focus { border-color: #6366f1; }
+        .p-2 { padding: 0.5rem; }
+        .bg-green-500 { background-color: #22c55e; }
+        .hover\:bg-green-600:hover { background-color: #16a34a; }
+        .bg-red-500 { background-color: #ef4444; }
+        .hover\:bg-red-600:hover { background-color: #dc2626; }
     </style>
 </head>
 <body class="bg-gray-100 p-4 rounded-lg shadow-lg font-sans text-gray-800">
@@ -52,11 +64,17 @@
         Send to Anki (Dev)
     </button>
     
+    <div class="mt-4">
+        <label for="geminiApiKeyInput" class="block text-gray-700 text-sm font-medium mb-1">Gemini API Key:</label>
+        <input type="password" id="geminiApiKeyInput" placeholder="Enter your Gemini API Key" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        <button id="saveApiKeyBtn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md transition duration-300 ease-in-out shadow-md mt-2">
+            Save API Key
+        </button>
+        <div id="apiKeyStatus" class="mt-2 text-xs text-center"></div>
+    </div>
+
     <div id="status" class="mt-4 text-xs text-gray-700 italic"></div>
 
     <script src="popup.js"></script>
-    <!-- REMOVED: The following script tag was causing the CSP error. 
-         Its functionality is replaced by the inline <style> block above. -->
-    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
 </body>
 </html>
