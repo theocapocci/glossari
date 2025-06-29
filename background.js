@@ -1,3 +1,5 @@
+//Limitations: no phonetic information with current API
+
 // Log a message to the console to confirm the background script is loaded
 console.log("Glossari background service worker loaded!");
 
