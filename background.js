@@ -1,4 +1,5 @@
 // Limitations: no phonetic information with current API
+// Currently sends log of AI prompt
 
 // Log a message to the console to confirm the background script is loaded
 console.log("Glossari background service worker loaded!");
@@ -93,47 +94,53 @@ function convertMarkdownToHtml(markdownText) {
 
 // This function is designed to be executed within the content script's context
 // via chrome.scripting.executeScript. It extracts the currently selected text,
-// its relevant sentences, its containing block-level element, and a broader environmental snippet.
+// its relevant sentences, its containing block-level element, and broader environmental snippets.
 function getSelectedTextAndContextForAI() {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
-        return { selectedText: '', relevantSentences: '', containingBlock: '', environ: '' };
+        return { selectedText: '', relevantSentences: '', containingBlock: '', preEnvironText: '', postEnvironText: '' };
     }
 
     const range = selection.getRangeAt(0);
     const selectedText = selection.toString().trim();
 
     if (!selectedText) {
-        return { selectedText: '', relevantSentences: '', containingBlock: '', environ: '' };
+        return { selectedText: '', relevantSentences: '', containingBlock: '', preEnvironText: '', postEnvironText: '' };
     }
 
-    let relevantSentences = ''; // Renamed from containingSentence
+    let relevantSentences = '';
     let containingBlock = '';
-    let environ = '';
+    let preEnvironText = '';
+    let postEnvironText = '';
 
-    // --- 1. Extract Containing Block (e.g., paragraph, div, list item) ---
+    // --- 1. Extract Containing Block (prioritizing <p> and <li> tags) ---
     // Find the closest block-level ancestor for context.
     let blockAncestorNode = range.commonAncestorContainer;
     while (blockAncestorNode && blockAncestorNode.nodeType !== Node.ELEMENT_NODE ||
-           (blockAncestorNode.nodeName !== 'P' &&
+           (blockAncestorNode.nodeName !== 'P' && // Keep P here as it's a block type we consider
             blockAncestorNode.nodeName !== 'DIV' &&
-            blockAncestorNode.nodeName !== 'LI' && // Include list items as block-like
-            blockAncestorNode.nodeName !== 'BODY' && // Stop before body to get a more specific block
+            blockAncestorNode.nodeName !== 'LI' && // Keep LI here as it's a block type we consider
+            blockAncestorNode.nodeName !== 'BODY' &&
             blockAncestorNode.nodeName !== 'ARTICLE' &&
             blockAncestorNode.nodeName !== 'SECTION')) {
+        if (blockAncestorNode.nodeName === 'HTML') { // Reached top without finding
+            blockAncestorNode = null;
+            break;
+        }
         blockAncestorNode = blockAncestorNode.parentNode;
     }
-
-    if (blockAncestorNode && blockAncestorNode.nodeName !== 'HTML') { // Ensure we found a valid block, not just html root
+    
+    // Now extract the text content from the determined blockAncestorNode
+    if (blockAncestorNode && blockAncestorNode.nodeName !== 'HTML') {
         containingBlock = blockAncestorNode.textContent.trim();
     } else {
-        // Fallback to a broader text search (e.g., document body) if no clear block-like element is found.
+        // Fallback to document.body.innerText if no clear block-like element is found.
         containingBlock = document.body.innerText.trim();
     }
 
+
     // --- 2. Extract Relevant Sentences ---
     // This attempts to find the full sentence(s) containing the selected text within the DOM structure.
-    // It's designed to handle selections that are less than, equal to, or greater than a single sentence.
     const textIterator = document.createTreeWalker(
         range.commonAncestorContainer,
         NodeFilter.SHOW_TEXT,
@@ -146,10 +153,13 @@ function getSelectedTextAndContextForAI() {
     let preText = '';
     let postText = '';
 
+    // Determine the boundary for sentence search (the containing block we just found, or document.body)
+    const sentenceSearchBoundary = blockAncestorNode || document.body;
+
     // Collect text from nodes before the start of selection
     let currentNode = startNode;
     // Iterate backwards through text nodes and sibling elements until a sentence terminator or block boundary
-    while (currentNode && currentNode !== blockAncestorNode) { // Stop at block boundary
+    while (currentNode && currentNode !== sentenceSearchBoundary) { // Stop at calculated boundary
         if (currentNode.nodeType === Node.TEXT_NODE) {
             preText = currentNode.textContent + preText; // Prepend to build text backwards
             if (currentNode === startNode) {
@@ -162,7 +172,7 @@ function getSelectedTextAndContextForAI() {
         }
         // Move to previous sibling or up to parent then previous sibling
         let prevSibling = currentNode.previousSibling;
-        if (!prevSibling && currentNode.parentNode && currentNode.parentNode !== blockAncestorNode) {
+        if (!prevSibling && currentNode.parentNode && currentNode.parentNode !== sentenceSearchBoundary) {
             currentNode = currentNode.parentNode;
             prevSibling = currentNode.previousSibling; // Try sibling of parent
         }
@@ -181,7 +191,7 @@ function getSelectedTextAndContextForAI() {
     // Collect text from nodes after the end of selection
     currentNode = endNode;
     // Iterate forwards through text nodes and sibling elements until a sentence terminator or block boundary
-    while (currentNode && currentNode !== blockAncestorNode) { // Stop at block boundary
+    while (currentNode && currentNode !== sentenceSearchBoundary) { // Stop at calculated boundary
         if (currentNode.nodeType === Node.TEXT_NODE) {
             postText += currentNode.textContent;
             if (currentNode === endNode) {
@@ -194,7 +204,7 @@ function getSelectedTextAndContextForAI() {
         }
         // Move to next sibling or up to parent then next sibling
         let nextSibling = currentNode.nextSibling;
-        if (!nextSibling && currentNode.parentNode && currentNode.parentNode !== blockAncestorNode) {
+        if (!nextSibling && currentNode.parentNode && currentNode.parentNode !== sentenceSearchBoundary) {
             currentNode = currentNode.parentNode;
             nextSibling = currentNode.nextSibling; // Try sibling of parent
         }
@@ -214,7 +224,7 @@ function getSelectedTextAndContextForAI() {
     }
     postText = postText.trim();
 
-    relevantSentences = (preText + selectedText + postText).trim(); // Renamed here
+    relevantSentences = (preText + selectedText + postText).trim();
 
     // Fallback: If relevantSentences is still just the selectedText or very short, try to expand using containingBlock.
     // This handles cases where the DOM traversal might have been too restrictive.
@@ -252,9 +262,8 @@ function getSelectedTextAndContextForAI() {
     }
 
 
-    // --- 3. Extract Environ (broader surrounding text snippet) ---
-    // Take a larger snippet around the containingBlock, up to a certain length.
-    const MAX_ENVIRON_LENGTH = 1000;
+    // --- 3. Extract Environ (broader surrounding text snippet, split into pre/post block) ---
+    const MAX_ENVIRON_SIDE_LENGTH = 500; // Max characters for pre or post text
     const commonAncestorOfBlock = (blockAncestorNode && blockAncestorNode.parentNode) || document.body;
     let fullEnvironText = commonAncestorOfBlock.textContent || '';
     
@@ -263,26 +272,43 @@ function getSelectedTextAndContextForAI() {
         fullEnvironText = document.body.innerText || '';
     }
 
-    const selectedTextIndexInEnviron = fullEnvironText.indexOf(selectedText);
-    if (selectedTextIndexInEnviron !== -1) {
-        const start = Math.max(0, selectedTextIndexInEnviron - Math.floor((MAX_ENVIRON_LENGTH - selectedText.length) / 2));
-        const end = Math.min(fullEnvironText.length, selectedTextIndexInEnviron + selectedText.length + Math.ceil((MAX_ENVIRON_LENGTH - selectedText.length) / 2));
-        environ = fullEnvironText.substring(start, end).trim();
+    const containingBlockIndexInEnviron = fullEnvironText.indexOf(containingBlock);
+
+    if (containingBlockIndexInEnviron !== -1) {
+        // Text before the containing block
+        let startOfPre = Math.max(0, containingBlockIndexInEnviron - MAX_ENVIRON_SIDE_LENGTH);
+        preEnvironText = fullEnvironText.substring(startOfPre, containingBlockIndexInEnviron).trim();
+
+        // Text after the containing block
+        let startOfPost = containingBlockIndexInEnviron + containingBlock.length;
+        let endOfPost = Math.min(fullEnvironText.length, startOfPost + MAX_ENVIRON_SIDE_LENGTH);
+        postEnvironText = fullEnvironText.substring(startOfPost, endOfPost).trim();
     } else {
-        // Fallback: if selected text still not found, just use the beginning of the body text.
-        environ = fullEnvironText.substring(0, Math.min(fullEnvironText.length, MAX_ENVIRON_LENGTH)).trim();
+        // Fallback if containingBlock itself wasn't found within fullEnvironText (e.g., edge case)
+        // In this case, environ reverts to simple pre/post around selectedText from the broader context
+        const selectedTextIndexInEnviron = fullEnvironText.indexOf(selectedText);
+        if (selectedTextIndexInEnviron !== -1) {
+            preEnvironText = fullEnvironText.substring(Math.max(0, selectedTextIndexInEnviron - MAX_ENVIRON_SIDE_LENGTH), selectedTextIndexInEnviron).trim();
+            postEnvironText = fullEnvironText.substring(selectedTextIndexInEnviron + selectedText.length, Math.min(fullEnvironText.length, selectedTextIndexInEnviron + selectedText.length + MAX_ENVIRON_SIDE_LENGTH)).trim();
+        } else {
+            // Ultimate fallback if selectedText is not found even in fullEnvironText
+            preEnvironText = '';
+            postEnvironText = fullEnvironText.substring(0, Math.min(fullEnvironText.length, MAX_ENVIRON_SIDE_LENGTH * 2)).trim();
+        }
     }
-    // Final check for environ
-    if (!environ.includes(selectedText)) {
-        environ = selectedText; // Ultimate fallback
+
+    // Ensure selectedText is in at least one of the contexts. If environ is empty, add selectedText to preEnvironText.
+    if (!relevantSentences.includes(selectedText) && !containingBlock.includes(selectedText) && !preEnvironText.includes(selectedText) && !postEnvironText.includes(selectedText)) {
+        preEnvironText = selectedText; // As an absolute last resort, ensure the selected text is somewhere.
     }
 
 
     return {
         selectedText: selectedText,
-        relevantSentences: relevantSentences, // Renamed here
+        relevantSentences: relevantSentences,
         containingBlock: containingBlock,
-        environ: environ
+        preEnvironText: preEnvironText, // Now two distinct properties
+        postEnvironText: postEnvironText // Now two distinct properties
     };
 }
 
@@ -380,7 +406,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             });
 
             // The result is an array, take the first result.
-            const { selectedText, relevantSentences, containingBlock, environ } = queryResponse[0].result;
+            const { selectedText, relevantSentences, containingBlock, preEnvironText, postEnvironText } = queryResponse[0].result;
 
             if (!selectedText) {
                 throw new Error("No text selected for AI explanation or context retrieval failed.");
@@ -394,9 +420,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             let promptParts = [];
             
             // Add AI Persona/Identity
-            promptParts.push("You are a highly knowledgeable linguistic expert, specializing in semantics and pragmatics. Your task is to analyze the nuances of language use and provide concise explanations.");
+            promptParts.push("You are a highly knowledgeable translator, specialized in using contextual information to make inferences about the meaning of linguistic expressions. Your task is provide concise explanations of linguistic expressions.");
             
-            // Modified prompt to combine "Given the linguistic item" with the explanation request
+            // Start the main request directly
             promptParts.push(`For the linguistic item: "${selectedText}",`);
             
             // Add relevantSentences if it's distinct from selectedText and non-empty
@@ -407,15 +433,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             if (containingBlock && containingBlock !== selectedText && containingBlock !== relevantSentences) {
                 promptParts.push(`Its containing block (paragraph, list item, or similar) is: "${containingBlock}"`);
             }
-            // Add environ if it's distinct from all previous contexts
-            if (environ && environ !== selectedText && environ !== relevantSentences && environ !== containingBlock) {
-                promptParts.push(`Broader surrounding text (environmental context): "${environ}"`);
+            // Add preEnvironText if it exists and is distinct from other contexts
+            if (preEnvironText && preEnvironText !== selectedText && preEnvironText !== relevantSentences && preEnvironText !== containingBlock) {
+                promptParts.push(`Text preceding its containing block: "${preEnvironText}"`);
+            }
+            // Add postEnvironText if it exists and is distinct from other contexts
+            if (postEnvironText && postEnvironText !== selectedText && postEnvironText !== relevantSentences && postEnvironText !== containingBlock) {
+                promptParts.push(`Text following its containing block: "${postEnvironText}"`);
             }
 
-            promptParts.push(`\nPlease explain how the linguistic item is *standardly used*, and then the *usage of this item* in context. Please provide a concise explanation.`);
+            promptParts.push(`\nPlease provide a concise explanation of the *usage of this this item* in context.`);
+
 
             const prompt = promptParts.join('\n');
-            // --- END Prompt Construction ---
+
+            // --- Log the prompt to the console for debugging ---
+            console.log("AI Prompt sent:", prompt);
+            // --- END Log ---
 
             // Make the API request to the Gemini API.
             const response = await fetch(apiUrl, {
