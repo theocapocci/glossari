@@ -10,3 +10,11 @@ Glossari is intended to be a browser extension designed to assist vocabulary acq
 
 4. Seamless Integration: Designed to work smoothly across various webpages, making learning an integral part of your browsing experience.
 
+
+
+___
+
+
+
+Context.
+

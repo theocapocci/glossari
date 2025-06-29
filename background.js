@@ -48,8 +48,7 @@ function convertMarkdownToHtml(markdownText) {
         else if (trimmedLine.match(/^\d+\.\s/)) {
             // If we are not currently in an ordered list, start one
             if (!inOrderedList) {
-                // If we were in an unordered list, close it before starting a new ordered list
-                if (inUnorderedList) {
+                if (inUnorderedList) { // If currently in an unordered list, close it before starting a new ordered list
                     htmlOutput.push('</ul>');
                     inUnorderedList = false;
                 }
@@ -92,6 +91,201 @@ function convertMarkdownToHtml(markdownText) {
     return htmlOutput.join('\n');
 }
 
+// This function is designed to be executed within the content script's context
+// via chrome.scripting.executeScript. It extracts the currently selected text,
+// its relevant sentences, its containing block-level element, and a broader environmental snippet.
+function getSelectedTextAndContextForAI() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+        return { selectedText: '', relevantSentences: '', containingBlock: '', environ: '' };
+    }
+
+    const range = selection.getRangeAt(0);
+    const selectedText = selection.toString().trim();
+
+    if (!selectedText) {
+        return { selectedText: '', relevantSentences: '', containingBlock: '', environ: '' };
+    }
+
+    let relevantSentences = ''; // Renamed from containingSentence
+    let containingBlock = '';
+    let environ = '';
+
+    // --- 1. Extract Containing Block (e.g., paragraph, div, list item) ---
+    // Find the closest block-level ancestor for context.
+    let blockAncestorNode = range.commonAncestorContainer;
+    while (blockAncestorNode && blockAncestorNode.nodeType !== Node.ELEMENT_NODE ||
+           (blockAncestorNode.nodeName !== 'P' &&
+            blockAncestorNode.nodeName !== 'DIV' &&
+            blockAncestorNode.nodeName !== 'LI' && // Include list items as block-like
+            blockAncestorNode.nodeName !== 'BODY' && // Stop before body to get a more specific block
+            blockAncestorNode.nodeName !== 'ARTICLE' &&
+            blockAncestorNode.nodeName !== 'SECTION')) {
+        blockAncestorNode = blockAncestorNode.parentNode;
+    }
+
+    if (blockAncestorNode && blockAncestorNode.nodeName !== 'HTML') { // Ensure we found a valid block, not just html root
+        containingBlock = blockAncestorNode.textContent.trim();
+    } else {
+        // Fallback to a broader text search (e.g., document body) if no clear block-like element is found.
+        containingBlock = document.body.innerText.trim();
+    }
+
+    // --- 2. Extract Relevant Sentences ---
+    // This attempts to find the full sentence(s) containing the selected text within the DOM structure.
+    // It's designed to handle selections that are less than, equal to, or greater than a single sentence.
+    const textIterator = document.createTreeWalker(
+        range.commonAncestorContainer,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+    );
+
+    let startNode = range.startContainer;
+    let endNode = range.endContainer;
+    let preText = '';
+    let postText = '';
+
+    // Collect text from nodes before the start of selection
+    let currentNode = startNode;
+    // Iterate backwards through text nodes and sibling elements until a sentence terminator or block boundary
+    while (currentNode && currentNode !== blockAncestorNode) { // Stop at block boundary
+        if (currentNode.nodeType === Node.TEXT_NODE) {
+            preText = currentNode.textContent + preText; // Prepend to build text backwards
+            if (currentNode === startNode) {
+                 preText = preText.substring(0, range.startOffset); // Only take text before selection start
+            }
+            // Check for sentence end markers (., !, ?, newline)
+            if (preText.match(/[.!?\n]$/)) {
+                break;
+            }
+        }
+        // Move to previous sibling or up to parent then previous sibling
+        let prevSibling = currentNode.previousSibling;
+        if (!prevSibling && currentNode.parentNode && currentNode.parentNode !== blockAncestorNode) {
+            currentNode = currentNode.parentNode;
+            prevSibling = currentNode.previousSibling; // Try sibling of parent
+        }
+        currentNode = prevSibling;
+
+        if (preText.length > 500) break; // Limit backward search to prevent excessive processing
+    }
+    // Trim preText to the last sentence terminator if found
+    const lastSentenceEndIndex = Math.max(preText.lastIndexOf('.'), preText.lastIndexOf('!'), preText.lastIndexOf('?'), preText.lastIndexOf('\n'));
+    if (lastSentenceEndIndex !== -1 && lastSentenceEndIndex === preText.length -1) { // Only if terminator is at very end
+        preText = preText.substring(lastSentenceEndIndex + 1); // Start after terminator
+    }
+    preText = preText.trim();
+
+
+    // Collect text from nodes after the end of selection
+    currentNode = endNode;
+    // Iterate forwards through text nodes and sibling elements until a sentence terminator or block boundary
+    while (currentNode && currentNode !== blockAncestorNode) { // Stop at block boundary
+        if (currentNode.nodeType === Node.TEXT_NODE) {
+            postText += currentNode.textContent;
+            if (currentNode === endNode) {
+                postText = postText.substring(range.endOffset); // Only take text after selection end
+            }
+            // Check for sentence start markers (., !, ?, newline)
+            if (postText.match(/^[.!?\n]/)) {
+                break;
+            }
+        }
+        // Move to next sibling or up to parent then next sibling
+        let nextSibling = currentNode.nextSibling;
+        if (!nextSibling && currentNode.parentNode && currentNode.parentNode !== blockAncestorNode) {
+            currentNode = currentNode.parentNode;
+            nextSibling = currentNode.nextSibling; // Try sibling of parent
+        }
+        currentNode = nextSibling;
+
+        if (postText.length > 500) break; // Limit forward search to prevent excessive processing
+    }
+    // Trim postText to the first sentence terminator if found
+    const firstSentenceEndIndex = Math.min(
+        postText.indexOf('.') === -1 ? Infinity : postText.indexOf('.'),
+        postText.indexOf('!') === -1 ? Infinity : postText.indexOf('!'),
+        postText.indexOf('?') === -1 ? Infinity : postText.indexOf('?'),
+        postText.indexOf('\n') === -1 ? Infinity : postText.indexOf('\n')
+    );
+    if (firstSentenceEndIndex !== Infinity) {
+        postText = postText.substring(0, firstSentenceEndIndex + 1); // Include the terminator
+    }
+    postText = postText.trim();
+
+    relevantSentences = (preText + selectedText + postText).trim(); // Renamed here
+
+    // Fallback: If relevantSentences is still just the selectedText or very short, try to expand using containingBlock.
+    // This handles cases where the DOM traversal might have been too restrictive.
+    if (relevantSentences.length <= selectedText.length + 5 && containingBlock.includes(selectedText)) {
+        const selectedIndexInBlock = containingBlock.indexOf(selectedText);
+        if (selectedIndexInBlock !== -1) {
+            // Find approximate start of relevant text in block
+            let searchStartInBlock = Math.max(0, selectedIndexInBlock - 200); // Look back a bit
+            // Find approximate end of relevant text in block
+            let searchEndInBlock = Math.min(containingBlock.length, selectedIndexInBlock + selectedText.length + 200); // Look forward a bit
+
+            // Attempt to expand to nearest sentence boundaries within this larger snippet
+            let tempSnippet = containingBlock.substring(searchStartInBlock, searchEndInBlock);
+            const tempSelectedIdx = tempSnippet.indexOf(selectedText);
+
+            if (tempSelectedIdx !== -1) {
+                let sStart = tempSelectedIdx;
+                while (sStart > 0 && !['.', '!', '?', '\n'].includes(tempSnippet[sStart - 1])) {
+                    sStart--;
+                }
+                let sEnd = tempSelectedIdx + selectedText.length;
+                while (sEnd < tempSnippet.length && !['.', '!', '?', '\n'].includes(tempSnippet[sEnd])) {
+                    sEnd++;
+                }
+                if (['.', '!', '?', '\n'].includes(tempSnippet[sEnd -1])) { // Check last char of captured snippet
+                    sEnd++;
+                }
+                relevantSentences = tempSnippet.substring(sStart, sEnd).trim();
+            }
+        }
+    }
+    // Ensure selectedText is always within relevantSentences
+    if (!relevantSentences.includes(selectedText)) {
+        relevantSentences = selectedText; // Fallback to just selectedText
+    }
+
+
+    // --- 3. Extract Environ (broader surrounding text snippet) ---
+    // Take a larger snippet around the containingBlock, up to a certain length.
+    const MAX_ENVIRON_LENGTH = 1000;
+    const commonAncestorOfBlock = (blockAncestorNode && blockAncestorNode.parentNode) || document.body;
+    let fullEnvironText = commonAncestorOfBlock.textContent || '';
+    
+    // Ensure selectedText is in fullEnvironText. If not, try innerText of body
+    if (!fullEnvironText.includes(selectedText)) {
+        fullEnvironText = document.body.innerText || '';
+    }
+
+    const selectedTextIndexInEnviron = fullEnvironText.indexOf(selectedText);
+    if (selectedTextIndexInEnviron !== -1) {
+        const start = Math.max(0, selectedTextIndexInEnviron - Math.floor((MAX_ENVIRON_LENGTH - selectedText.length) / 2));
+        const end = Math.min(fullEnvironText.length, selectedTextIndexInEnviron + selectedText.length + Math.ceil((MAX_ENVIRON_LENGTH - selectedText.length) / 2));
+        environ = fullEnvironText.substring(start, end).trim();
+    } else {
+        // Fallback: if selected text still not found, just use the beginning of the body text.
+        environ = fullEnvironText.substring(0, Math.min(fullEnvironText.length, MAX_ENVIRON_LENGTH)).trim();
+    }
+    // Final check for environ
+    if (!environ.includes(selectedText)) {
+        environ = selectedText; // Ultimate fallback
+    }
+
+
+    return {
+        selectedText: selectedText,
+        relevantSentences: relevantSentences, // Renamed here
+        containingBlock: containingBlock,
+        environ: environ
+    };
+}
+
 
 // Add a listener that runs when the extension is first installed or updated
 chrome.runtime.onInstalled.addListener(() => {
@@ -127,62 +321,44 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // Add a listener for when any context menu item from this extension is clicked
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-    const selectedText = info.selectionText.trim();
+    const initialSelectedText = info.selectionText.trim(); // Initial text from context menu info
 
-    // If no text is selected, or the selected text is just whitespace,
-    // we exit silently as there's nothing to define or explain.
-    if (!selectedText) {
-        return;
+    if (!initialSelectedText) {
+        return; // Exit if no text is selected
     }
 
     // Handle the "Define" action
     if (info.menuItemId === "defineWord") {
         try {
-            // Define the language pair for the translation.
-            // Current assumption is French to English. You can modify 'fr|en' as needed.
             const langPair = 'fr|en';
+            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(initialSelectedText)}&langpair=${langPair}`;
 
-            // Construct the API URL for the MyMemory translation service.
-            // The selected text is URL-encoded to ensure it's safe for a URL.
-            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(selectedText)}&langpair=${langPair}`;
-
-            // Make the API request to MyMemory.
             const response = await fetch(url);
             const data = await response.json();
 
-            // Check the response status from the translation API.
-            // A status other than 200 indicates an error.
             if (data.responseStatus !== 200) {
                 throw new Error(data.responseDetails || "Translation API returned an error.");
             }
 
-            // Extract the translated/defined text from the response.
             const definition = data.responseData.translatedText;
 
-            // Check if a meaningful definition was returned.
-            // If the definition is empty or identical to the input (case-insensitive),
-            // it's likely that no distinct definition was found.
-            if (!definition || definition.toLowerCase() === selectedText.toLowerCase()) {
-                 throw new Error(`No distinct definition found for "${selectedText}"`);
+            if (!definition || definition.toLowerCase() === initialSelectedText.toLowerCase()) {
+                 throw new Error(`No distinct definition found for "${initialSelectedText}"`);
             }
 
-            // If successful, inject a script into the active tab to display the result.
-            // The `displayResultOnPage` function (defined below) will handle the UI.
             chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 function: displayResultOnPage,
-                args: [selectedText, 'Translation', definition] // 'Translation' acts as a label/category here
+                args: [initialSelectedText, 'Translation', definition]
             });
 
         } catch (error) {
-            // Log any errors that occur during the definition process.
             console.error("Glossari Definition Error:", error.message);
             
-            // Display an error message on the page if the definition fails.
             chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 function: displayResultOnPage,
-                args: [selectedText, 'Error', `Definition Failed: ${error.message}`]
+                args: [initialSelectedText, 'Error', `Definition Failed: ${error.message}`]
             });
         }
     }
@@ -197,11 +373,49 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 throw new Error("Gemini API Key is not set. Please set it in the extension popup.");
             }
 
+            // --- Get selected text and its detailed context from the content script ---
+            const queryResponse = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                function: getSelectedTextAndContextForAI // Execute this function in the content script context
+            });
+
+            // The result is an array, take the first result.
+            const { selectedText, relevantSentences, containingBlock, environ } = queryResponse[0].result;
+
+            if (!selectedText) {
+                throw new Error("No text selected for AI explanation or context retrieval failed.");
+            }
+            // --- END Context Retrieval ---
+
             const model = "gemini-2.0-flash"; // Using 'gemini-2.0-flash' for text generation
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
-            // Define the prompt for the AI.
-            const prompt = `Explain the following text concisely and clearly: "${selectedText}"`;
+            // --- Build a more contextual prompt for the AI using the context properties and a persona ---
+            let promptParts = [];
+            
+            // Add AI Persona/Identity
+            promptParts.push("You are a highly knowledgeable linguistic expert, specializing in semantics and pragmatics. Your task is to analyze the nuances of language use and provide concise explanations.");
+            
+            // Modified prompt to combine "Given the linguistic item" with the explanation request
+            promptParts.push(`For the linguistic item: "${selectedText}",`);
+            
+            // Add relevantSentences if it's distinct from selectedText and non-empty
+            if (relevantSentences && relevantSentences !== selectedText) {
+                promptParts.push(`Its immediate context (relevant sentence(s) or closest phrase unit) is: "${relevantSentences}"`);
+            }
+            // Add containingBlock if it's distinct from selectedText and relevantSentences
+            if (containingBlock && containingBlock !== selectedText && containingBlock !== relevantSentences) {
+                promptParts.push(`Its containing block (paragraph, list item, or similar) is: "${containingBlock}"`);
+            }
+            // Add environ if it's distinct from all previous contexts
+            if (environ && environ !== selectedText && environ !== relevantSentences && environ !== containingBlock) {
+                promptParts.push(`Broader surrounding text (environmental context): "${environ}"`);
+            }
+
+            promptParts.push(`\nPlease explain how the linguistic item is *standardly used*, and then the *usage of this item* in context. Please provide a concise explanation.`);
+
+            const prompt = promptParts.join('\n');
+            // --- END Prompt Construction ---
 
             // Make the API request to the Gemini API.
             const response = await fetch(apiUrl, {
@@ -282,8 +496,7 @@ function displayResultOnPage(word, label, text) {
     glossariDisplay.innerHTML = `
         <div class="glossari-header">
             <strong>${word}</strong>
-            <span class="glossari-label">${label}</span> <!-- Uses the updated .glossari-label class -->
-            <button id="glossari-close-btn">&times;</button>
+            <span class="glossari-label">${label}</span> <button id="glossari-close-btn">&times;</button>
         </div>
         <div class="glossari-body">
             ${text}
