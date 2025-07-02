@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
     const apiKeyStatusDiv = document.getElementById('apiKeyStatus');
 
+    // NEW: Get reference to the dark mode toggle
+    const darkModeToggle = document.getElementById('darkModeToggle');
+
     // Variables to hold the currently selected word and sentence for Anki
     let currentSelectedWord = null;
     let currentFullSentence = null;
@@ -135,4 +138,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load Anki data and update the button state when the popup is first opened
     loadAnkiDataForPopup();
+
+    // --- NEW: Dark Mode Logic ---
+    // Function to apply the theme based on the saved preference
+    const applyTheme = (isDarkMode) => {
+        if (isDarkMode) {
+            document.body.classList.add('dark-mode');
+        } else {
+            document.body.classList.remove('dark-mode');
+        }
+    };
+
+    // Load saved theme preference when the popup opens
+    const loadThemePreference = async () => {
+        try {
+            const result = await chrome.storage.local.get('isDarkMode');
+            const isDarkMode = result.isDarkMode || false; // Default to light mode
+            darkModeToggle.checked = isDarkMode; // Set toggle state
+            applyTheme(isDarkMode); // Apply the theme
+        } catch (error) {
+            console.error("Error loading theme preference:", error);
+        }
+    };
+
+    // Save theme preference when the toggle is changed
+    darkModeToggle.addEventListener('change', async () => {
+        const isDarkMode = darkModeToggle.checked;
+        try {
+            await chrome.storage.local.set({ isDarkMode: isDarkMode });
+            applyTheme(isDarkMode); // Apply theme immediately
+        } catch (error) {
+            console.error("Error saving theme preference:", error);
+        }
+    });
+
+    // Load theme preference when the popup is first opened
+    loadThemePreference();
 });

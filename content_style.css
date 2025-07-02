@@ -4,20 +4,51 @@
  * that your 'content.js' script creates and injects into the page.
  */
 
+/* Define CSS variables for colors */
+:root {
+    /* Light Mode */
+    --glossari-bg-color: #ffffff;
+    --glossari-border-color: #e0e0e0;
+    --glossari-shadow-color: rgba(0, 0, 0, 0.15);
+    --glossari-text-color: #333;
+    --glossari-header-bg-color: #f7f7f7;
+    --glossari-label-color: #555;
+    --glossari-close-btn-color: #888;
+    --glossari-close-btn-hover-color: #333;
+    --status-success-border: #22c55e;
+    --status-error-border: #ef4444;
+}
+
+/* Dark Mode overrides */
+body.dark-mode { /* Apply to the body as it's the root for content script injected elements */
+    --glossari-bg-color: #2d3748; /* Darker background */
+    --glossari-border-color: #4a5568; /* Darker border */
+    --glossari-shadow-color: rgba(0, 0, 0, 0.4); /* More prominent shadow for dark mode */
+    --glossari-text-color: #e2e8f0; /* Light text */
+    --glossari-header-bg-color: #242b38; /* Slightly darker header */
+    --glossari-label-color: #a0aec0; /* Lighter label text */
+    --glossari-close-btn-color: #a0aec0;
+    --glossari-close-btn-hover-color: #e2e8f0;
+    --status-success-border: #48bb78; /* Lighter green for dark mode */
+    --status-error-border: #fc8181; /* Lighter red for dark mode */
+}
+
+
 #glossari-display {
     position: fixed;
     bottom: 20px;
     right: 20px;
     width: 300px;
-    background-color: #ffffff;
-    border: 1px solid #e0e0e0;
+    background-color: var(--glossari-bg-color); /* Use variable */
+    border: 1px solid var(--glossari-border-color); /* Use variable */
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px var(--glossari-shadow-color); /* Use variable */
     z-index: 100000;
     font-family: 'Inter', sans-serif;
     font-size: 14px;
-    color: #333;
+    color: var(--glossari-text-color); /* Use variable */
     overflow: hidden;
+    transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out, border-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out; /* Smooth transitions */
 }
 
 .glossari-header {
@@ -25,17 +56,19 @@
     justify-content: space-between;
     align-items: center;
     padding: 10px 12px;
-    background-color: #f7f7f7;
-    border-bottom: 1px solid #e0e0e0;
+    background-color: var(--glossari-header-bg-color); /* Use variable */
+    border-bottom: 1px solid var(--glossari-border-color); /* Use variable */
+    transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out;
 }
 
 .glossari-header strong {
     font-weight: 600;
+    color: var(--glossari-text-color); /* Ensure strong tag also uses text color variable */
 }
 
 .glossari-label {
     font-style: italic;
-    color: #555;
+    color: var(--glossari-label-color); /* Use variable */
 }
 
 #glossari-close-btn {
@@ -43,16 +76,18 @@
     border: none;
     font-size: 20px;
     cursor: pointer;
-    color: #888;
+    color: var(--glossari-close-btn-color); /* Use variable */
+    transition: color 0.3s ease-in-out;
 }
 
 #glossari-close-btn:hover {
-    color: #333;
+    color: var(--glossari-close-btn-hover-color); /* Use variable */
 }
 
 .glossari-body {
     padding: 12px;
     line-height: 1.6;
+    color: var(--glossari-text-color); /* Ensure body text also uses text color variable */
 }
 
 /* --- New styles for list indentation --- */
@@ -93,4 +128,14 @@
     background-color: #e0e7ff; /* A lighter background for selection */
     padding: 2px 0; /* Adjust padding to make border visible */
     border-radius: 4px;
+}
+
+/* Status display styling (from content.js showStatusDisplay) */
+/* This part ensures the status display also respects dark/light mode */
+#glossari-display[style*="border-color:"] { /* Target the dynamically styled border */
+    /* Override fixed border colors if dark mode is active */
+    border-color: var(--status-success-border) !important; /* Use !important to override inline style */
+}
+#glossari-display[style*="border-color: #ef4444"] {
+    border-color: var(--status-error-border) !important;
 }

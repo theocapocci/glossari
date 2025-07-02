@@ -36,8 +36,9 @@ async function sendStatusMessage(status, message) {
  * @param {string} word - The selected word/phrase (will be the highlighted text).
  * @param {string} label - The label for the box (e.g., 'Translation', 'AI Explanation').
  * @param {string} text - The main content (definition or explanation / translated sentence, now potentially with bold HTML).
+ * @param {boolean} isDarkModeActive - NEW: Indicates if dark mode is active.
  */
-function displayResultOnPage(word, label, text) {
+function displayResultOnPage(word, label, text, isDarkModeActive) { // NEW: Added isDarkModeActive parameter
     let glossariDisplay = document.getElementById('glossari-display');
     if (glossariDisplay) {
         glossariDisplay.remove();
@@ -45,6 +46,14 @@ function displayResultOnPage(word, label, text) {
 
     glossariDisplay = document.createElement('div');
     glossariDisplay.id = 'glossari-display';
+
+    // NEW: Apply dark mode class if active
+    if (isDarkModeActive) {
+        document.body.classList.add('dark-mode');
+    } else {
+        document.body.classList.remove('dark-mode');
+    }
+
     glossariDisplay.innerHTML = `
         <div class="glossari-header">
             <strong>${word}</strong>
@@ -59,6 +68,10 @@ function displayResultOnPage(word, label, text) {
 
     document.getElementById('glossari-close-btn').addEventListener('click', () => {
         glossariDisplay.remove();
+        // NEW: Clean up dark mode class from body when display box is closed
+        if (!document.querySelector('#glossari-display')) { // Only remove if no other display is active
+            document.body.classList.remove('dark-mode');
+        }
     });
 }
 
@@ -119,8 +132,6 @@ async function createAnkiFlashcard({ selectedWord, fullSentence }) {
     }
 }
 
-// --- START: ADD THESE HELPER FUNCTION DEFINITIONS ---
-
 /**
  * Handles the MyMemory definition logic.
  * This is factored out so it can be called from both context menu and shortcut.
@@ -143,18 +154,23 @@ async function handleDefineMyMemory(selectedText, tabId) {
             throw new Error(`No distinct definition found for "${selectedText}".`);
         }
 
+        // NEW: Fetch dark mode preference
+        const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
+
         chrome.scripting.executeScript({
             target: { tabId: tabId },
             function: displayResultOnPage,
-            args: [selectedText, 'Translation', definition]
+            args: [selectedText, 'Translation', definition, isDarkMode] // NEW: Pass isDarkMode
         });
 
     } catch (error) {
         console.error("Glossari Definition Error (MyMemory):", error.message);
+        // NEW: Fetch dark mode preference for error display
+        const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
         chrome.scripting.executeScript({
             target: { tabId: tabId },
             function: displayResultOnPage,
-            args: [selectedText, 'Error', `Definition Failed: ${error.message}`]
+            args: [selectedText, 'Error', `Definition Failed: ${error.message}`, isDarkMode] // NEW: Pass isDarkMode
         });
     }
 }
@@ -192,24 +208,26 @@ async function handleTranslateGemini(selectedText, fullSentence, tabId) {
         // in case Gemini sometimes defaults to Markdown despite the prompt.
         fullSentenceTranslatedAndBolded = convertMarkdownBoldToHtml(fullSentenceTranslatedAndBolded);
 
+        // NEW: Fetch dark mode preference
+        const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
+
         chrome.scripting.executeScript({
             target: { tabId: tabId },
             function: displayResultOnPage,
-            args: [selectedText, 'Translation', fullSentenceTranslatedAndBolded]
+            args: [selectedText, 'Translation', fullSentenceTranslatedAndBolded, isDarkMode] // NEW: Pass isDarkMode
         });
 
     } catch (error) {
         console.error("Glossari Sentence Translation Error:", error.message);
+        // NEW: Fetch dark mode preference for error display
+        const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
         chrome.scripting.executeScript({
             target: { tabId: tabId },
             function: displayResultOnPage,
-            args: [selectedText, 'Error', `Sentence Translation Failed: ${error.message}`]
+            args: [selectedText, 'Error', `Sentence Translation Failed: ${error.message}`, isDarkMode] // NEW: Pass isDarkMode
         });
     }
 }
-
-// --- END: ADD THESE HELPER FUNCTION DEFINITIONS ---
-
 
 // =================================================================================
 // SECTION 2: LISTENERS
@@ -261,7 +279,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     } else if (info.menuItemId === "sendSelectionToAnki") {
         try {
             const { fullSentenceForAnki } = await chrome.storage.local.get('fullSentenceForAnki');
-            let fullSentence = fullSentenceForAnki; // Corrected variable name
+            let fullSentence = fullSentenceForAnki;
 
             // This fallback logic to get the full sentence is important if the user
             // right-clicks immediately without a 'mouseup' event firing in content.js first.
@@ -309,7 +327,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         }
     } else if (info.menuItemId === "translateSentenceGemini") {
         const { fullSentenceForAnki } = await chrome.storage.local.get('fullSentenceForAnki');
-        let fullSentence = fullSentenceForAnki; // Use a distinct variable name
+        let fullSentence = fullSentenceForAnki;
 
         // Fallback if fullSentenceForAnki wasn't set (duplicate but necessary for context menu)
         if (!fullSentence) {
