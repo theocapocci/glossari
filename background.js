@@ -67,9 +67,9 @@ async function createAnkiFlashcard({ selectedWord, fullSentence }) {
         const { geminiApiKey } = await chrome.storage.local.get('geminiApiKey');
         if (!geminiApiKey) throw new Error("Gemini API Key is not set.");
 
-        const model = "gemini-1.5-flash";
+        const model = "gemini-2.0-flash";
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
-        const aiPrompt = `What is the definition of the word "${selectedWord}" as it is used in the sentence: "${fullSentence}"? Provide only the definition.`;
+        const aiPrompt = `What is the meaning of the French word "${selectedWord}" as it is used in the sentence: "${fullSentence}"? Provide a concise, single-phrase English definition suitable for the back of an n+1 flashcard. Do not include any introductory phrases or additional context. Do not restate ${selectedWord}. Example: for 'maison', you would output 'house'`;
 
         const aiResponse = await fetch(geminiApiUrl, {
             method: 'POST',
@@ -79,18 +79,20 @@ async function createAnkiFlashcard({ selectedWord, fullSentence }) {
         const aiData = await aiResponse.json();
         if (!aiResponse.ok || !aiData.candidates) throw new Error(aiData.error?.message || "AI API request failed.");
 
-        const definition = aiData.candidates[0].content.parts[0].text.trim();
+        let definition = aiData.candidates[0].content.parts[0].text.trim();
+        definition = definition.toLowerCase(); 
+
         const ankiFront = fullSentence;
-        const ankiBack = `<strong>${selectedWord}</strong><br><hr>${definition}`;
+        const ankiBack = `<strong>${selectedWord}</strong> = ${definition}`;
         const ankiPayload = {
             action: "addNote",
             version: 6,
             params: {
                 note: {
-                    deckName: "Glossari Sentence Mining",
+                    deckName: "Glossari",
                     modelName: "Obsidian-basic",
                     fields: { "Front": ankiFront, "Back": ankiBack },
-                    tags: ["glossari_n+1"]
+                    tags: ["français"]
                 }
             }
         };
