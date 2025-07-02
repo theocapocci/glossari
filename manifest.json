@@ -14,7 +14,9 @@
     "https://api.mymemory.translated.net/"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"  
+
   },
   "content_scripts": [
     {
@@ -45,7 +47,21 @@
         "default": "Ctrl+Shift+A",
         "mac": "Command+Shift+A"
       },
-      "description": "Send the selected sentence to Anki"
+      "description": "Create n+1 flashcard for selected term" 
+    },
+    "define-selected-text": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+D",
+        "mac": "Command+Shift+D"
+      },
+      "description": "Define selected text using MyMemory."
+    },
+    "translate-sentence": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+T",
+        "mac": "Command+Shift+T"
+      },
+      "description": "Translate the sentence containing selected text using Gemini."
     }
   }
 }
