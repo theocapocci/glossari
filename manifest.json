@@ -12,13 +12,16 @@
   "host_permissions": [
     "<all_urls>",
     "https://api.mymemory.translated.net/"
-],
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "<all_urls>",
+        "file://*/*"
+      ],
       "js": ["content.js"],
       "css": ["content_style.css"]
     }
@@ -35,5 +38,14 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "commands": {
+    "send-to-anki": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+A",
+        "mac": "Command+Shift+A"
+      },
+      "description": "Send the selected sentence to Anki"
+    }
   }
 }

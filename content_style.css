@@ -76,3 +76,21 @@
     margin-bottom: 0.25rem; /* Space between list items */
 }
 /* --- End new styles for list indentation --- */
+
+/* Styles for clickable word spans in the transcript */
+#transcript-container span {
+    cursor: pointer; /* Indicate it's clickable */
+}
+
+#transcript-container span:hover {
+    background-color: #ffe0b2; /* Light orange highlight on hover */
+    border-radius: 4px;
+}
+
+/* Style for the visually selected word */
+.glossari-selected-word {
+    border: 2px solid #6366f1; /* A distinct border color */
+    background-color: #e0e7ff; /* A lighter background for selection */
+    padding: 2px 0; /* Adjust padding to make border visible */
+    border-radius: 4px;
+}
