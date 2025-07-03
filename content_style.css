@@ -90,67 +90,37 @@ body.dark-mode { /* Apply to the body as it's the root for content script inject
     color: var(--glossari-text-color); /* Ensure body text also uses text color variable */
 }
 
-/* --- New styles for list indentation --- */
-#glossari-display ul,
-#glossari-display ol {
-    margin-left: 1.25rem; /* Standard indentation */
-    padding-left: 0; /* Browsers often use padding, but we'll use margin for consistent indentation */
-    list-style-position: outside; /* Ensures bullets/numbers are outside the content */
-    margin-bottom: 0.5rem; /* Add some space between lists and other elements */
+#glossari-display ul, #glossari-display ol {
+    margin-left: 1.25rem;
+    padding-left: 0;
+    list-style-position: outside;
+    margin-bottom: 0.5rem;
 }
+#glossari-display ul { list-style-type: disc; }
+#glossari-display ol { list-style-type: decimal; }
+#glossari-display li { margin-bottom: 0.25rem; }
 
-#glossari-display ul {
-    list-style-type: disc; /* Default bullet for unordered lists */
-}
-
-#glossari-display ol {
-    list-style-type: decimal; /* Default numbering for ordered lists */
-}
-
-#glossari-display li {
-    margin-bottom: 0.25rem; /* Space between list items */
-}
-/* --- End new styles for list indentation --- */
-
-/* Styles for clickable word spans in the transcript */
-#transcript-container span {
-    cursor: pointer; /* Indicate it's clickable */
-}
-
-#transcript-container span:hover {
-    background-color: #ffe0b2; /* Light orange highlight on hover */
-    border-radius: 4px;
-}
-
-/* Style for the visually selected word */
 .glossari-selected-word {
-    border: 2px solid #6366f1; /* A distinct border color */
-    background-color: #e0e7ff; /* A lighter background for selection */
-    padding: 2px 0; /* Adjust padding to make border visible */
+    border: 2px solid #6366f1;
+    background-color: #e0e7ff;
+    padding: 2px 0;
     border-radius: 4px;
 }
 
-/* Status display styling (from content.js showStatusDisplay) */
-/* This part ensures the status display also respects dark/light mode */
-#glossari-display[style*="border-color:"] { /* Target the dynamically styled border */
-    /* Override fixed border colors if dark mode is active */
-    border-color: var(--status-success-border) !important; /* Use !important to override inline style */
+#glossari-display[style*="border-color:"] {
+    border-color: var(--status-success-border) !important;
 }
 #glossari-display[style*="border-color: #ef4444"] {
     border-color: var(--status-error-border) !important;
 }
 
-/* ... (keep all existing styles) ... */
-
-/* --- New styles for footer and buttons --- */
 .glossari-footer {
     display: flex;
-    justify-content: flex-end; /* Align buttons to the right */
+    justify-content: flex-end;
     padding: 8px 12px;
     background-color: var(--glossari-header-bg-color);
     border-top: 1px solid var(--glossari-border-color);
 }
-
 .glossari-footer button {
     border: 1px solid var(--glossari-border-color);
     background-color: var(--glossari-bg-color);
@@ -162,14 +132,11 @@ body.dark-mode { /* Apply to the body as it's the root for content script inject
     margin-left: 8px;
     transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
 }
-
 .glossari-footer button:hover {
-    border-color: #a0aec0; /* A neutral hover border color */
+    border-color: #a0aec0;
 }
-
-/* Specific style for the confirm button */
 #glossari-confirm-btn {
-    background-color: #6366f1; /* Indigo */
+    background-color: #6366f1;
     color: #fff;
     border-color: #6366f1;
 }
@@ -183,30 +150,24 @@ body.dark-mode #glossari-confirm-btn {
     border-color: #4f46e5;
 }
 
-/* --- NEW: Activation Status Popup --- */
 #glossari-activation-popup {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    background-color: #2d3748; /* Dark background for good contrast */
+    background-color: #2d3748;
     color: white;
     padding: 12px 20px;
     border-radius: 8px;
-    z-index: 200000; /* Higher than other elements */
+    z-index: 200000;
     display: flex;
     align-items: center;
     justify-content: space-between;
     box-shadow: 0 5px 15px rgba(0,0,0,0.3);
     font-family: 'Inter', sans-serif;
     font-size: 14px;
-    /* Animation: fade in for 0.5s, then wait 3s, then fade out for 0.5s */
     animation: glossari-fade-in-out 4s forwards;
 }
-
-#glossari-activation-popup strong {
-    font-weight: 700;
-}
-
+#glossari-activation-popup strong { font-weight: 700; }
 #glossari-activation-popup .close-btn {
     background: none;
     border: none;
@@ -218,23 +179,83 @@ body.dark-mode #glossari-confirm-btn {
     opacity: 0.7;
     transition: opacity 0.2s;
 }
-
-#glossari-activation-popup .close-btn:hover {
-    opacity: 1;
-}
-
-/* Animation keyframes */
+#glossari-activation-popup .close-btn:hover { opacity: 1; }
 @keyframes glossari-fade-in-out {
-    0% {
-        transform: translateY(20px);
-        opacity: 0;
-    }
-    12.5%, 87.5% { /* Fade in for 0.5s, stay for 3s */
-        transform: translateY(0);
-        opacity: 1;
-    }
-    100% {
-        transform: translateY(20px);
-        opacity: 0;
-    }
+    0% { transform: translateY(20px); opacity: 0; }
+    12.5%, 87.5% { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(20px); opacity: 0; }
 }
+
+#glossari-selection-panel {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: auto;
+    background-color: var(--glossari-bg-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px var(--glossari-shadow-color);
+    z-index: 100000;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    color: var(--glossari-text-color);
+    border: 1px solid var(--glossari-border-color);
+    overflow: hidden;
+}
+.glossari-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background-color: var(--glossari-header-bg-color);
+    border-bottom: 1px solid var(--glossari-border-color);
+    max-width: 320px;
+}
+.glossari-panel-header span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.glossari-panel-header strong { font-weight: 600; }
+#glossari-panel-close-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--glossari-close-btn-color);
+    margin-left: 8px;
+}
+#glossari-panel-close-btn:hover { color: var(--glossari-close-btn-hover-color); }
+.glossari-panel-body { padding: 12px; }
+.glossari-button-group { display: flex; }
+.glossari-button-group button {
+    border: 1px solid #6366f1;
+    background-color: #6366f1;
+    color: #fff;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color 0.2s ease-in-out;
+    font-size: 12px;
+    white-space: nowrap;
+}
+.glossari-button-group button:hover { background-color: #4f46e5; }
+
+/* Style the main buttons */
+#glossari-create-sentence-btn, #glossari-create-vocab-btn {
+    border-top-left-radius: 5px;
+    border-bottom-left-radius: 5px;
+    flex-grow: 1; /* MODIFIED: Make the main button take up available space */
+    text-align: center; /* MODIFIED: Center the text inside the button */
+}
+
+/* Style the connected icon buttons */
+#glossari-trim-sentence-btn, #glossari-trim-vocab-btn {
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+    border-left: 1px solid #4f46e5; /* A slightly darker border to separate */
+    font-size: 14px;
+    padding: 6px 10px;
+    flex-grow: 0; /* MODIFIED: Ensure trim button does not grow */
+    flex-shrink: 0; /* MODIFIED: Ensure trim button does not shrink */
+}
+

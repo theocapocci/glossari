@@ -31,12 +31,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     else if (request.action === "showStatus") {
         showStatusDisplay(request.status, request.message);
         sendResponse({ success: true });
-    } 
+    }
     else if (request.action === "showAnkiTrimmer") {
         showAnkiTrimmer(request.selectedWord, request.fullSentence);
         sendResponse({ success: true });
     }
-    // NEW: Listen for the activation popup message
     else if (request.action === "showActivationPopup") {
         showActivationPopup(request.isActive);
         sendResponse({ success: true });
@@ -55,7 +54,7 @@ chrome.runtime.sendMessage({ action: "getInitialState" }, (response) => {
 
 
 /**
- * NEW: Displays a temporary notification that the extension has been turned on or off.
+ * Displays a temporary notification that the extension has been turned on or off.
  * @param {boolean} isActive - The new state of the extension.
  */
 function showActivationPopup(isActive) {
@@ -96,12 +95,11 @@ function showActivationPopup(isActive) {
 
 
 /**
- * NEW: Displays an editable box for trimming the sentence before sending to Anki.
+ * Displays an editable box for trimming the sentence for the front of a sentence card.
  * @param {string} selectedWord - The word or phrase the user highlighted.
  * @param {string} fullSentence - The full sentence context.
  */
 function showAnkiTrimmer(selectedWord, fullSentence) {
-    // Remove any existing display box
     const existingDisplay = document.getElementById('glossari-display');
     if (existingDisplay) {
         existingDisplay.remove();
@@ -110,10 +108,9 @@ function showAnkiTrimmer(selectedWord, fullSentence) {
     const displayDiv = document.createElement('div');
     displayDiv.id = 'glossari-display';
 
-    // The inner HTML now includes an editable body and action buttons
     displayDiv.innerHTML = `
         <div class="glossari-header">
-            <strong>Trim for Anki</strong>
+            <strong>Trim Sentence Card Front</strong>
             <span class="glossari-label">${selectedWord}</span>
         </div>
         <div class="glossari-body" contenteditable="true">
@@ -127,25 +124,68 @@ function showAnkiTrimmer(selectedWord, fullSentence) {
 
     document.body.appendChild(displayDiv);
 
-    // Event listener for the Confirm button
     document.getElementById('glossari-confirm-btn').addEventListener('click', () => {
         const trimmedSentence = displayDiv.querySelector('.glossari-body').innerText.trim();
-        
         if (trimmedSentence) {
-            // Send the final data to the background script to create the card
             chrome.runtime.sendMessage({
                 action: "createAnkiFlashcard",
                 selectedWord: selectedWord,
-                fullSentence: fullSentence, // The original, full sentence for AI context
-                frontContent: trimmedSentence // The new, trimmed sentence for the card front
+                fullSentence: fullSentence,
+                frontContent: trimmedSentence
             });
         }
-        displayDiv.remove(); // Close the display box
+        displayDiv.remove();
     });
 
-    // Event listener for the Cancel button
     document.getElementById('glossari-cancel-btn').addEventListener('click', () => {
-        displayDiv.remove(); // Just close the display box
+        displayDiv.remove();
+    });
+}
+
+/**
+ * Displays an editor for the back of a vocab card.
+ * @param {string} selectedWord
+ * @param {string} fullSentence
+ */
+function showVocabCardEditor(selectedWord, fullSentence) {
+    const existingDisplay = document.getElementById('glossari-display');
+    if (existingDisplay) {
+        existingDisplay.remove();
+    }
+
+    const displayDiv = document.createElement('div');
+    displayDiv.id = 'glossari-display';
+
+    displayDiv.innerHTML = `
+        <div class="glossari-header">
+            <strong>Trim Vocab Card Sentence</strong>
+            <span class="glossari-label">${selectedWord}</span>
+        </div>
+        <div class="glossari-body" contenteditable="true">
+            ${fullSentence}
+        </div>
+        <div class="glossari-footer">
+            <button id="glossari-cancel-btn">Cancel</button>
+            <button id="glossari-confirm-btn">Create Vocab Card</button>
+        </div>
+    `;
+
+    document.body.appendChild(displayDiv);
+
+    document.getElementById('glossari-confirm-btn').addEventListener('click', () => {
+        const trimmedSentence = displayDiv.querySelector('.glossari-body').innerText.trim();
+        if (trimmedSentence) {
+            chrome.runtime.sendMessage({
+                action: "createVocabFlashcard",
+                selectedWord: selectedWord,
+                sentence: trimmedSentence
+            });
+        }
+        displayDiv.remove();
+    });
+
+    document.getElementById('glossari-cancel-btn').addEventListener('click', () => {
+        displayDiv.remove();
     });
 }
 
@@ -170,7 +210,7 @@ function showStatusDisplay(status, message) {
         <div class="glossari-header"><strong>Glossari</strong></div>
         <div class="glossari-body">${message}</div>
     `;
-    
+
     document.body.appendChild(displayDiv);
 
     setTimeout(() => {
@@ -180,12 +220,90 @@ function showStatusDisplay(status, message) {
     }, 7000);
 }
 
+/**
+ * Shows an action panel after text is selected.
+ * @param {string} selectedWord
+ * @param {string} fullSentence
+ */
+function showSelectionActionPanel(selectedWord, fullSentence) {
+    const elementsToRemove = ['glossari-display', 'glossari-activation-popup', 'glossari-selection-panel'];
+    elementsToRemove.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    });
+
+    const panel = document.createElement('div');
+    panel.id = 'glossari-selection-panel';
+
+    // MODIFIED: Added a second button group for the vocab card.
+    panel.innerHTML = `
+        <div class="glossari-panel-header">
+            <span>Selected: <strong></strong></span>
+            <button id="glossari-panel-close-btn" title="Close">&times;</button>
+        </div>
+        <div class="glossari-panel-body">
+            <div class="glossari-button-group">
+                <button id="glossari-create-sentence-btn">Create Sentence Card</button>
+                <button id="glossari-trim-sentence-btn" title="Trim sentence before creating">✂️</button>
+            </div>
+            <div class="glossari-button-group" style="margin-top: 8px;">
+                <button id="glossari-create-vocab-btn">Create Vocab Card</button>
+                <button id="glossari-trim-vocab-btn" title="Trim sentence before creating">✂️</button>
+            </div>
+        </div>
+    `;
+    panel.querySelector('.glossari-panel-header strong').textContent = selectedWord;
+
+    document.body.appendChild(panel);
+
+    // --- Event Listeners ---
+    // Sentence Card - Direct Create
+    document.getElementById('glossari-create-sentence-btn').addEventListener('click', () => {
+        chrome.runtime.sendMessage({
+            action: "createAnkiFlashcard",
+            selectedWord: selectedWord,
+            fullSentence: fullSentence
+        });
+        panel.remove();
+    });
+
+    // Sentence Card - Trim
+    document.getElementById('glossari-trim-sentence-btn').addEventListener('click', () => {
+        panel.remove();
+        showAnkiTrimmer(selectedWord, fullSentence);
+    });
+
+    // Vocab Card - Direct Create
+    document.getElementById('glossari-create-vocab-btn').addEventListener('click', () => {
+        chrome.runtime.sendMessage({
+            action: "createVocabFlashcard",
+            selectedWord: selectedWord,
+            sentence: fullSentence // Use untrimmed sentence
+        });
+        panel.remove();
+    });
+
+    // Vocab Card - Trim
+    document.getElementById('glossari-trim-vocab-btn').addEventListener('click', () => {
+        panel.remove();
+        showVocabCardEditor(selectedWord, fullSentence);
+    });
+
+
+    document.getElementById('glossari-panel-close-btn').addEventListener('click', () => {
+        panel.remove();
+    });
+}
+
 
 /**
  * Main handler to capture selected text and its sentence context.
  * @param {MouseEvent} event
  */
 async function handleTextSelection(event) {
+    if (event.target.closest('#glossari-display, #glossari-selection-panel')) {
+        return;
+    }
     if (event.target.tagName === 'A' || event.target.tagName === 'BUTTON' || event.target.isContentEditable) {
         await chrome.storage.local.remove(['selectedWordForAnki', 'fullSentenceForAnki']);
         return;
@@ -194,7 +312,7 @@ async function handleTextSelection(event) {
     const selection = window.getSelection();
     const selectedText = selection.toString().trim();
 
-    if (selectedText.length > 0) {
+    if (selectedText.length > 0 && selectedText.length < 1000) {
         const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
         if (!range) return;
 
@@ -220,20 +338,18 @@ async function handleTextSelection(event) {
                  parentElement = parentElement.parentElement;
              }
         }
-        
+
         const blockText = parentElement ? parentElement.textContent || "" : selectedText;
         const clickPositionInBlock = parentElement && clickedNode.nodeType === Node.TEXT_NODE
                                      ? getClickPositionInBlock(parentElement, clickedNode, range.startOffset)
                                      : 0;
-
         const fullSentence = findSentenceInText(blockText, clickPositionInBlock);
-        
+
         await chrome.storage.local.set({
             selectedWordForAnki: selectedText,
             fullSentenceForAnki: fullSentence
         });
-
-        showStatusDisplay('success', `"${selectedText}" selected. Ready for action.`);
+        showSelectionActionPanel(selectedText, fullSentence);
     } else {
         await chrome.storage.local.remove(['selectedWordForAnki', 'fullSentenceForAnki']);
     }
