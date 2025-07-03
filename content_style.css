@@ -139,3 +139,46 @@ body.dark-mode { /* Apply to the body as it's the root for content script inject
 #glossari-display[style*="border-color: #ef4444"] {
     border-color: var(--status-error-border) !important;
 }
+
+/* ... (keep all existing styles) ... */
+
+/* --- New styles for footer and buttons --- */
+.glossari-footer {
+    display: flex;
+    justify-content: flex-end; /* Align buttons to the right */
+    padding: 8px 12px;
+    background-color: var(--glossari-header-bg-color);
+    border-top: 1px solid var(--glossari-border-color);
+}
+
+.glossari-footer button {
+    border: 1px solid var(--glossari-border-color);
+    background-color: var(--glossari-bg-color);
+    color: var(--glossari-text-color);
+    padding: 6px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 600;
+    margin-left: 8px;
+    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+}
+
+.glossari-footer button:hover {
+    border-color: #a0aec0; /* A neutral hover border color */
+}
+
+/* Specific style for the confirm button */
+#glossari-confirm-btn {
+    background-color: #6366f1; /* Indigo */
+    color: #fff;
+    border-color: #6366f1;
+}
+body.dark-mode #glossari-confirm-btn {
+    background-color: #4c51bf;
+    border-color: #4c51bf;
+    color: var(--glossari-text-color);
+}
+#glossari-confirm-btn:hover {
+    background-color: #4f46e5;
+    border-color: #4f46e5;
+}

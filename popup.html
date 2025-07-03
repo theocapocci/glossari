@@ -1,90 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Glossari</title>
-    <link rel="stylesheet" href="popup_style.css"> 
-    
-    <style>
-        /* New styles for theme toggle switch - ONLY KEEPING THESE HERE */
-        .theme-switch-wrapper {
-            display: flex;
-            align-items: center;
-            margin-top: 1rem;
-            justify-content: space-between; /* To push the toggle to the right */
-            width: 100%;
-        }
-
-        .theme-switch {
-            display: inline-block;
-            height: 20px;
-            position: relative;
-            width: 38px;
-        }
-
-        .theme-switch input {
-            display: none;
-        }
-
-        .slider {
-            background-color: #ccc;
-            bottom: 0;
-            cursor: pointer;
-            left: 0;
-            position: absolute;
-            right: 0;
-            top: 0;
-            transition: .4s;
-            border-radius: 20px; /* Make it rounded */
-        }
-
-        .slider:before {
-            background-color: #fff;
-            bottom: 2px;
-            content: "";
-            height: 16px;
-            left: 2px;
-            position: absolute;
-            transition: .4s;
-            width: 16px;
-            border-radius: 50%; /* Make the circle */
-        }
-
-        input:checked + .slider {
-            background-color: #6366f1; /* Indigo for dark mode */
-        }
-
-        input:checked + .slider:before {
-            transform: translateX(18px); /* Move the circle for dark mode */
-        }
-    </style>
+    <title>Glossari Settings</title>
+    <link rel="stylesheet" href="popup_style.css">
 </head>
-<body class="bg-gray-100 p-4 rounded-lg shadow-lg font-sans text-gray-800">
-    <h1 class="text-xl font-bold mb-2 text-indigo-700">Glossari</h1>
-    <p class="text-sm text-gray-600 mb-4">Select text on any webpage, then right-click!</p>
-    
-    <button id="ankiBtn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md transition duration-300 ease-in-out shadow-md">
-        Send to Anki (Dev)
-    </button>
-    
-    <div class="mt-4">
-        <label for="geminiApiKeyInput" class="block text-gray-700 text-sm font-medium mb-1">Gemini API Key:</label>
-        <input type="password" id="geminiApiKeyInput" placeholder="Enter your Gemini API Key" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-        <button id="saveApiKeyBtn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md transition duration-300 ease-in-out shadow-md mt-2">
-            Save API Key
-        </button>
-        <div id="apiKeyStatus" class="mt-2 text-xs text-center"></div>
+<body>
+    <div class="settings-container">
+        <h1 class="text-2xl font-bold mb-4 text-indigo-700">Glossari Settings</h1>
+        
+        <div class="settings-section">
+            <h2 class="text-lg font-semibold mb-2">Gemini API Key</h2>
+            <p class="text-sm text-gray-600 mb-3">Your API key is stored locally and is required for all translation and definition features.</p>
+            <label for="geminiApiKeyInput" class="block text-gray-700 text-sm font-medium mb-1">Enter your Gemini API Key:</label>
+            <input type="password" id="geminiApiKeyInput" placeholder="Enter your Gemini API Key" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <button id="saveApiKeyBtn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md transition duration-300 ease-in-out shadow-md mt-2">
+                Save API Key
+            </button>
+            <div id="apiKeyStatus" class="mt-2 text-xs text-center"></div>
+        </div>
+
+        <div class="settings-section">
+            <h2 class="text-lg font-semibold mb-2">Appearance</h2>
+            <div class="theme-switch-wrapper">
+                <span class="text-sm text-gray-700 font-medium">Enable Dark Mode:</span>
+                <label class="theme-switch">
+                    <input type="checkbox" id="darkModeToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
     </div>
-
-    <div class="theme-switch-wrapper">
-        <span class="text-sm text-gray-700 font-medium">Dark Mode:</span>
-        <label class="theme-switch">
-            <input type="checkbox" id="darkModeToggle">
-            <span class="slider"></span>
-        </label>
-    </div>
-
-    <div id="status" class="mt-4 text-xs text-gray-700 italic"></div>
-
     <script src="popup.js"></script>
 </body>
 </html>

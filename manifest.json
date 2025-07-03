@@ -16,7 +16,6 @@
   "background": {
     "service_worker": "background.js",
     "type": "module"  
-
   },
   "content_scripts": [
     {
@@ -29,7 +28,6 @@
     }
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

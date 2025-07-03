@@ -6,6 +6,70 @@ import { convertMarkdownBoldToHtml } from './utils.js';
 console.log("Glossari background service worker loaded with all features!");
 
 // =================================================================================
+// SECTION 0: STATE MANAGEMENT & TOGGLE
+// =================================================================================
+
+// Function to update the icon based on the current state
+async function updateIcon(isActive) {
+    const path = isActive ? "icons/icon_active.png" : "icons/icon128.png";
+    // To make this work, you'll need to add an "icon_active.png" to your icons folder.
+    // For now, it will gracefully fail and use the default if not found.
+    try {
+        await chrome.action.setIcon({ path: path });
+    } catch (error) {
+        console.warn("Could not set active icon. Make sure 'icons/icon_active.png' exists.");
+    }
+}
+
+// When the extension is installed, initialize the state to 'off' and create menus
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.storage.local.set({ isGlossariActive: false });
+    updateIcon(false);
+    
+    // --- CONTEXT MENU CREATION (REFACTORED) ---
+    
+    // 1. Context menus for text selection on a webpage
+    chrome.contextMenus.create({
+        id: "defineWord",
+        title: "Define '%s' (MyMemory)",
+        contexts: ["selection"]
+    });
+    chrome.contextMenus.create({
+        id: "sendSelectionToAnki",
+        title: "Send '%s' to Anki",
+        contexts: ["selection"]
+    });
+    chrome.contextMenus.create({
+        id: "translateSentenceGemini",
+        title: "Translate Sentence for '%s'",
+        contexts: ["selection"]
+    });
+
+    // 2. Context menu for the extension's toolbar icon (action)
+    chrome.contextMenus.create({
+        id: "glossariSettings",
+        title: "Glossari Settings",
+        contexts: ["action"] // This attaches the menu to the icon right-click
+    });
+    console.log("Context menus created successfully.");
+});
+
+// Listener for the browser action (the icon click)
+chrome.action.onClicked.addListener(async (tab) => {
+    const { isGlossariActive } = await chrome.storage.local.get('isGlossariActive');
+    const newState = !isGlossariActive;
+    
+    await chrome.storage.local.set({ isGlossariActive: newState });
+    await updateIcon(newState);
+    
+    // Notify the content script in the active tab to update its state
+    if (tab.id) {
+        chrome.tabs.sendMessage(tab.id, { action: "updateState", isActive: newState });
+    }
+});
+
+
+// =================================================================================
 // SECTION 1: HELPER FUNCTIONS
 // =================================================================================
 
@@ -77,16 +141,22 @@ function displayResultOnPage(word, label, text, isDarkModeActive) { // NEW: Adde
 
 /**
  * The core logic for creating an Anki flashcard.
- * @param {object} cardData - Contains selectedWord (now selected text/phrase) and fullSentence.
+ * @param {object} cardData - Contains selectedWord, fullSentence (for AI context), 
+ * and frontContent (for the card front).
  */
-async function createAnkiFlashcard({ selectedWord, fullSentence }) {
+async function createAnkiFlashcard({ selectedWord, fullSentence, frontContent }) {
     try {
         const { geminiApiKey } = await chrome.storage.local.get('geminiApiKey');
         if (!geminiApiKey) throw new Error("Gemini API Key is not set.");
+        
+        // Use the full sentence for the AI prompt to get the best context.
+        const contextForAI = fullSentence;
+        // Use the (potentially trimmed) frontContent for the Anki card. Default to full sentence if not provided.
+        const ankiFront = frontContent || fullSentence;
 
         const model = "gemini-2.0-flash";
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
-        const aiPrompt = `What is the meaning of the French phrase or word "${selectedWord}" as it is used in the sentence: "${fullSentence}"? Provide a concise, single-phrase English definition suitable for the back of an n+1 flashcard. Do not include any introductory phrases or additional context. Do not restate ${selectedWord}. Example: for 'maison', you would output 'house'. Example: for 'bonjour tout le monde', you would output 'hello everyone'`;
+        const aiPrompt = `What is the meaning of the French phrase or word "${selectedWord}" as it is used in the sentence: "${contextForAI}"? Provide a concise, single-phrase English definition suitable for the back of an n+1 flashcard. Do not include any introductory phrases or additional context. Do not restate ${selectedWord}. Example: for 'maison', you would output 'house'. Example: for 'bonjour tout le monde', you would output 'hello everyone'`;
 
         const aiResponse = await fetch(geminiApiUrl, {
             method: 'POST',
@@ -99,7 +169,6 @@ async function createAnkiFlashcard({ selectedWord, fullSentence }) {
         let definition = aiData.candidates[0].content.parts[0].text.trim();
         definition = definition.toLowerCase();
 
-        const ankiFront = fullSentence;
         const ankiBack = `<strong>${selectedWord}</strong> = ${definition}`;
         const ankiPayload = {
             action: "addNote",
@@ -131,6 +200,7 @@ async function createAnkiFlashcard({ selectedWord, fullSentence }) {
         await sendStatusMessage('error', `Error: ${error.message}`);
     }
 }
+
 
 /**
  * Handles the MyMemory definition logic.
@@ -196,11 +266,10 @@ async function handleTranslateGemini(selectedText, fullSentence, tabId) {
         const aiResponse = await fetch(geminiApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: translationPrompt }] }] })
+            body: JSON.stringify({ contents: [{ parts: [{ text: aiPrompt }] }] })
         });
         const aiData = await aiResponse.json();
-
-        if (!aiResponse.ok || !aiData.candidates) throw new Error(aiData.error?.message || "Gemini API request failed for translation.");
+        if (!aiResponse.ok || !aiData.candidates) throw new Error(aiData.error?.message || "AI API request failed for translation.");
 
         let fullSentenceTranslatedAndBolded = aiData.candidates[0].content.parts[0].text.trim();
 
@@ -234,40 +303,23 @@ async function handleTranslateGemini(selectedText, fullSentence, tabId) {
 // =================================================================================
 
 /**
- * Fires when the extension is installed or updated.
- * Creates the right-click context menus.
- */
-chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create({
-        id: "glossariParent",
-        title: "Glossari",
-        contexts: ["selection"]
-    });
-    chrome.contextMenus.create({
-        id: "defineWord",
-        title: "Define '%s' (MyMemory)",
-        parentId: "glossariParent",
-        contexts: ["selection"]
-    });
-    chrome.contextMenus.create({
-        id: "sendSelectionToAnki",
-        title: "Send '%s' to Anki",
-        parentId: "glossariParent",
-        contexts: ["selection"]
-    });
-    chrome.contextMenus.create({
-        id: "translateSentenceGemini",
-        title: "Translate Sentence (Gemini)",
-        parentId: "glossariParent",
-        contexts: ["selection"]
-    });
-    console.log("Context menus created successfully.");
-});
-
-/**
  * Handles clicks on the context menu items.
  */
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    // Handle the settings menu item first, as it should always be available.
+    if (info.menuItemId === "glossariSettings") {
+        // This opens the popup.html file as a settings page in a new tab.
+        chrome.tabs.create({ url: 'popup.html' });
+        return;
+    }
+    
+    // All other context menu items should only work if the extension is active
+    const { isGlossariActive } = await chrome.storage.local.get('isGlossariActive');
+    if (!isGlossariActive) {
+        await sendStatusMessage('error', 'Glossari is currently off. Click the icon to turn it on.');
+        return;
+    }
+    
     const selectedText = info.selectionText.trim();
     if (!selectedText) {
         await sendStatusMessage('error', 'No text selected for context menu action.');
@@ -314,10 +366,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 });
                 fullSentence = tabResult?.result || selectedText;
             }
-
+            
+            // For context menu, there's no trimming, so frontContent is the same as fullSentence
             await createAnkiFlashcard({
                 selectedWord: selectedText,
                 fullSentence: fullSentence
+                // frontContent is omitted, so it will default to fullSentence in the function
             });
             await chrome.storage.local.remove(['selectedWordForAnki', 'fullSentenceForAnki']);
 
@@ -354,7 +408,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                             }
                             parent = parent.parentNode;
                         }
-                        return selRange.toString();
+                        return getFullSentenceContext(range);
                     }
                     return getFullSentenceContext(range);
                 }
@@ -374,47 +428,59 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 /**
- * Listener for messages from the popup button.
+ * Listener for messages from the popup or content script.
  */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // This now handles requests from the trimmer UI and the main popup
     if (request.action === "createAnkiFlashcard") {
-        createAnkiFlashcard(request);
+        createAnkiFlashcard(request).then(() => {
+            // Clean up storage after the card is created
+            chrome.storage.local.remove(['selectedWordForAnki', 'fullSentenceForAnki']);
+        });
         return true; // Indicates an asynchronous response
     }
+    // New: Listen for content script asking for initial state
+    else if (request.action === "getInitialState") {
+        chrome.storage.local.get('isGlossariActive').then(data => {
+            sendResponse({ isActive: data.isGlossariActive });
+        });
+        return true; // Required for async response
+    }
 });
+
 
 /**
  * Listener for the keyboard shortcuts.
  */
 chrome.commands.onCommand.addListener(async (command) => {
+    // Commands should only work if the extension is active
+    const { isGlossariActive } = await chrome.storage.local.get('isGlossariActive');
+    if (!isGlossariActive) return;
+    
     const { selectedWordForAnki, fullSentenceForAnki } = await chrome.storage.local.get(['selectedWordForAnki', 'fullSentenceForAnki']);
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-    // Ensure we have a valid tab before proceeding, as tab could be null/undefined in rare cases.
     if (!tab || !tab.id) {
         console.warn('No active tab found for command:', command);
         return;
     }
 
-    // A single, comprehensive check for selection existence for all commands
     if (!selectedWordForAnki || !fullSentenceForAnki) {
         await sendStatusMessage('error', 'No text selected. Please highlight a word or phrase first.');
         return;
     }
 
-    // Now, execute command-specific logic
     if (command === "send-to-anki") {
-        await createAnkiFlashcard({
+        // Send a message to the content script to show the trimmer UI on the page.
+        chrome.tabs.sendMessage(tab.id, {
+            action: "showAnkiTrimmer",
             selectedWord: selectedWordForAnki,
             fullSentence: fullSentenceForAnki
         });
-        // Clear storage only after the Anki card is created successfully, as it's the "final" action
-        await chrome.storage.local.remove(['selectedWordForAnki', 'fullSentenceForAnki']);
+
     } else if (command === "define-selected-text") {
         await handleDefineMyMemory(selectedWordForAnki, tab.id);
-        // Do NOT clear storage here, as the user might want to use the same selection for another action.
     } else if (command === "translate-sentence") {
         await handleTranslateGemini(selectedWordForAnki, fullSentenceForAnki, tab.id);
-        // Do NOT clear storage here, as the user might want to use the same selection for another action.
     }
 });
