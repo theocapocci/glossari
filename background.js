@@ -23,7 +23,6 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.storage.local.set({ isGlossariActive: false });
     updateIcon(false);
     chrome.contextMenus.create({ id: "defineWord", title: "Define '%s' (MyMemory)", contexts: ["selection"] });
-    chrome.contextMenus.create({ id: "sendSelectionToAnki", title: "Send '%s' to Anki", contexts: ["selection"] });
     chrome.contextMenus.create({ id: "translateSentenceGemini", title: "Translate Sentence for '%s'", contexts: ["selection"] });
     chrome.contextMenus.create({ id: "glossariSettings", title: "Glossari Settings", contexts: ["action"] });
     console.log("Context menus created successfully.");
@@ -84,33 +83,25 @@ function displayResultOnPage(word, label, text, isDarkModeActive) {
     });
 }
 
+async function ankiConnectRequest(action, params = {}) {
+    const response = await fetch("http://127.0.0.1:8765", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, version: 6, params })
+    });
+    const result = await response.json();
+    if (result.error) {
+        throw new Error(`AnkiConnect Error: ${result.error}`);
+    }
+    return result.result;
+}
 
-/**
- * NEW: Checks if an Anki deck exists and creates it if it doesn't.
- * @param {string} deckName - The name of the deck to ensure exists.
- * @returns {Promise<void>}
- */
+
 async function ensureDeckExists(deckName) {
     try {
-        const response = await fetch("http://127.0.0.1:8765", {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: "deckNames", version: 6 })
-        });
-        const result = await response.json();
-        if (result.error) {
-            throw new Error(`AnkiConnect: ${result.error}`);
-        }
-        if (!result.result.includes(deckName)) {
-            const createDeckResult = await fetch("http://127.0.0.1:8765", {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: "createDeck", version: 6, params: { deck: deckName } })
-            });
-            const createResult = await createDeckResult.json();
-            if (createResult.error) {
-                throw new Error(`AnkiConnect could not create deck: ${createResult.error}`);
-            }
+        const deckNames = await ankiConnectRequest("deckNames");
+        if (!deckNames.includes(deckName)) {
+            await ankiConnectRequest("createDeck", { deck: deckName });
             console.log(`Deck "${deckName}" was created successfully.`);
         }
     } catch (error) {
@@ -119,50 +110,48 @@ async function ensureDeckExists(deckName) {
 }
 
 
-/**
- * UPDATED: Creates a standard sentence flashcard.
- * @param {object} cardData
- */
+async function callGeminiAPI(prompt, apiKey) {
+    const model = "gemini-1.5-flash-latest";
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(geminiApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.candidates) {
+        throw new Error(data.error?.message || "AI API request failed.");
+    }
+    return data.candidates[0].content.parts[0].text.trim();
+}
+
+async function addAnkiNote(deckName, front, back, tags = []) {
+    const note = {
+        deckName: deckName,
+        modelName: "Basic",
+        fields: { Front: front, Back: back },
+        tags: tags
+    };
+    return ankiConnectRequest("addNote", { note });
+}
+
 async function createAnkiFlashcard({ selectedWord, fullSentence, frontContent }) {
     try {
-        // UPDATED: Get the sentenceDeck name from storage.
         const { geminiApiKey, sentenceDeck } = await chrome.storage.local.get(['geminiApiKey', 'sentenceDeck']);
-        const targetDeck = sentenceDeck || 'Glossari Sentences'; // Use saved deck or fallback.
+        const targetDeck = sentenceDeck || 'Glossari Sentences';
 
         if (!geminiApiKey) throw new Error("Gemini API Key is not set.");
-
-        // UPDATED: Ensure the target deck exists before proceeding.
         await ensureDeckExists(targetDeck);
 
-        const contextForAI = fullSentence;
         const ankiFront = frontContent || fullSentence;
-        const model = "gemini-1.5-flash-latest";
-        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
-        const aiPrompt = `What is the meaning of the French phrase or word "${selectedWord}" as it is used in the sentence: "${contextForAI}"? Provide a concise, single-phrase English definition suitable for the back of an n+1 flashcard. Do not include any introductory phrases or additional context. Do not restate ${selectedWord}. Example: for 'maison', you would output 'house'.`;
+        const aiPrompt = `What is the meaning of the French phrase or word "${selectedWord}" as it is used in the sentence: "${fullSentence}"? Provide a concise, single-phrase English definition suitable for the back of an n+1 flashcard. Do not include any introductory phrases or additional context. Do not restate ${selectedWord}. Example: for 'maison', you would output 'house'.`;
 
-        const aiResponse = await fetch(geminiApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: aiPrompt }] }] })
-        });
-        const aiData = await aiResponse.json();
-        if (!aiResponse.ok || !aiData.candidates) throw new Error(aiData.error?.message || "AI API request failed.");
+        const definition = await callGeminiAPI(aiPrompt, geminiApiKey);
+        const ankiBack = `<strong>${selectedWord}</strong> = ${definition.toLowerCase()}`;
 
-        let definition = aiData.candidates[0].content.parts[0].text.trim().toLowerCase();
-        const ankiBack = `<strong>${selectedWord}</strong> = ${definition}`;
-
-        // UPDATED: Use the targetDeck variable for the deckName.
-        const ankiPayload = {
-            action: "addNote", version: 6,
-            params: { note: { deckName: targetDeck, modelName: "basic", fields: { "Front": ankiFront, "Back": ankiBack }, tags: ["français"] } }
-        };
-
-        const ankiResultResponse = await fetch("http://127.0.0.1:8765", {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ankiPayload)
-        });
-        const ankiResult = await ankiResultResponse.json();
-        if (ankiResult.error) throw new Error(`AnkiConnect: ${ankiResult.error}`);
-        console.log("Anki card added successfully:", ankiResult.result);
+        await addAnkiNote(targetDeck, ankiFront, ankiBack, ["français"]);
         await sendStatusMessage('success', `Sentence card for "<strong>${selectedWord}</strong>" created in deck "<strong>${targetDeck}</strong>"!`);
     } catch (error) {
         console.error("Glossari Flashcard Creation Error:", error.message);
@@ -170,45 +159,21 @@ async function createAnkiFlashcard({ selectedWord, fullSentence, frontContent })
     }
 }
 
-/**
- * UPDATED: Creates a vocabulary flashcard.
- * @param {object} cardData
- */
 async function createVocabFlashcard({ selectedWord, sentence }) {
     try {
-        // UPDATED: Get the vocabDeck name from storage.
         const { geminiApiKey, vocabDeck } = await chrome.storage.local.get(['geminiApiKey', 'vocabDeck']);
-        const targetDeck = vocabDeck || 'Glossari Vocab'; // Use saved deck or fallback.
+        const targetDeck = vocabDeck || 'Glossari Vocab';
 
         if (!geminiApiKey) throw new Error("Gemini API Key is not set.");
-
-        // UPDATED: Ensure the target deck exists before proceeding.
         await ensureDeckExists(targetDeck);
 
-        // --- Step 1: Get Contextual Meaning from Gemini ---
-        const model = "gemini-1.5-flash-latest";
-        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
         const contextualPrompt = `Analyze the French word "${selectedWord}" in the context of the sentence: "${sentence}". Provide a concise English definition for the word as it's used in that specific sentence. Return only the definition of "${selectedWord}", with no introductory phrases.`;
-
-        const geminiResponse = await fetch(geminiApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: contextualPrompt }] }] })
-        });
-        const geminiData = await geminiResponse.json();
-        if (!geminiResponse.ok || !geminiData.candidates) {
-            throw new Error(geminiData.error?.message || "Gemini API request failed.");
-        }
-        
-        let contextualMeaning = geminiData.candidates[0].content.parts[0].text.trim();
+        let contextualMeaning = await callGeminiAPI(contextualPrompt, geminiApiKey);
         contextualMeaning = contextualMeaning.replace(/\.$/, "");
 
-
-        // --- Step 2: Get Other Meanings from MyMemory ---
         const myMemoryUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(selectedWord)}&langpair=fr|en`;
         const myMemoryResponse = await fetch(myMemoryUrl);
         const myMemoryData = await myMemoryResponse.json();
-
         let otherMeanings = [];
         if (myMemoryData.responseStatus === 200 && myMemoryData.matches) {
             const uniqueTranslations = new Set();
@@ -221,10 +186,8 @@ async function createVocabFlashcard({ selectedWord, sentence }) {
             otherMeanings = Array.from(uniqueTranslations).slice(0, 3);
         }
 
-        // --- Step 3: Format the Anki card content ---
         const ankiFront = selectedWord;
-        const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`\\b(${escapeRegExp(selectedWord)})\\b`, 'gi');
+        const regex = new RegExp(`\\b(${selectedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\b`, 'gi');
         const formattedSentence = sentence.replace(regex, '<b>$1</b>');
 
         let ankiBack = `<div><em>${formattedSentence}</em></div><hr><div><b>${selectedWord}</b> = ${contextualMeaning}</div>`;
@@ -232,30 +195,8 @@ async function createVocabFlashcard({ selectedWord, sentence }) {
             ankiBack += `<br><div><b>MyMemory:</b></div><ul>${otherMeanings.map(m => `<li>${m}</li>`).join('')}</ul>`;
         }
 
-        // --- Step 4: Send the formatted note to Anki ---
-        // UPDATED: Use the targetDeck variable for the deckName.
-        const ankiPayload = {
-            action: "addNote",
-            version: 6,
-            params: {
-                note: {
-                    deckName: targetDeck,
-                    modelName: "basic",
-                    fields: { "Front": ankiFront, "Back": ankiBack },
-                    tags: ["français", "vocab"]
-                }
-            }
-        };
-
-        const ankiResultResponse = await fetch("http://127.0.0.1:8765", {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ankiPayload)
-        });
-
-        const ankiResult = await ankiResultResponse.json();
-        if (ankiResult.error) throw new Error(`AnkiConnect: ${ankiResult.error}`);
-
+        await addAnkiNote(targetDeck, ankiFront, ankiBack, ["français", "vocab"]);
         await sendStatusMessage('success', `Vocab card for "<strong>${selectedWord}</strong>" created in deck "<strong>${targetDeck}</strong>"!`);
-
     } catch (error) {
         console.error("Glossari Vocab Card Creation Error:", error.message);
         await sendStatusMessage('error', `Vocab Card Error: ${error.message}`);
@@ -279,13 +220,11 @@ async function handleDefineMyMemory(selectedText, tabId) {
         }
 
         const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
-
         chrome.scripting.executeScript({
             target: { tabId: tabId },
             function: displayResultOnPage,
             args: [selectedText, 'MyMemory', definition, isDarkMode]
         });
-
     } catch (error) {
         console.error("Glossari Definition Error (MyMemory):", error.message);
         const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
@@ -302,30 +241,16 @@ async function handleTranslateGemini(selectedText, fullSentence, tabId) {
         const { geminiApiKey } = await chrome.storage.local.get('geminiApiKey');
         if (!geminiApiKey) throw new Error("Gemini API Key is not set.");
 
-        const model = "gemini-2.0-flash";
-        const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
-
         const translationPrompt = `Translate the following French sentence into English: "${fullSentence}". In the translated sentence, please make the English translation of "${selectedText}" bold using HTML <strong> tags. Provide only the translated sentence, without any additional text, quotes, or introductory phrases.`;
-
-        const aiResponse = await fetch(geminiApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: translationPrompt }] }] })
-        });
-        const aiData = await aiResponse.json();
-        if (!aiResponse.ok || !aiData.candidates) throw new Error(aiData.error?.message || "AI API request failed for translation.");
-
-        let fullSentenceTranslatedAndBolded = aiData.candidates[0].content.parts[0].text.trim();
-        fullSentenceTranslatedAndBolded = convertMarkdownBoldToHtml(fullSentenceTranslatedAndBolded);
+        let translatedSentence = await callGeminiAPI(translationPrompt, geminiApiKey);
+        translatedSentence = convertMarkdownBoldToHtml(translatedSentence);
 
         const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
-
         chrome.scripting.executeScript({
             target: { tabId: tabId },
             function: displayResultOnPage,
-            args: [selectedText, model, fullSentenceTranslatedAndBolded, isDarkMode]
+            args: [selectedText, "gemini-1.5-flash-latest", translatedSentence, isDarkMode]
         });
-
     } catch (error) {
         console.error("Glossari Sentence Translation Error:", error.message);
         const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
@@ -342,18 +267,44 @@ async function handleTranslateGemini(selectedText, fullSentence, tabId) {
 // SECTION 2: LISTENERS
 // =================================================================================
 
+async function getFullSentenceForSelection(tabId, selectedText) {
+    const [tabResult] = await chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        function: () => {
+            const selection = window.getSelection();
+            if (selection.rangeCount === 0) return null;
+            const range = selection.getRangeAt(0);
+            let container = range.startContainer;
+            while (container && container.nodeType !== Node.ELEMENT_NODE) {
+                container = container.parentNode;
+            }
+            if (!container) return range.toString();
+            let parent = container;
+            while (parent && parent !== document.body) {
+                const tagName = parent.tagName.toLowerCase();
+                if (['p', 'div', 'li', 'h1', 'h2', 'h3', 'blockquote', 'td', 'th', 'article', 'section'].includes(tagName)) {
+                    return parent.innerText.replace(/\s+/g, ' ').trim();
+                }
+                parent = parent.parentNode;
+            }
+            return range.toString();
+        }
+    });
+    return tabResult?.result || selectedText;
+}
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (info.menuItemId === "glossariSettings") {
         chrome.tabs.create({ url: 'popup.html' });
         return;
     }
-    
+
     const { isGlossariActive } = await chrome.storage.local.get('isGlossariActive');
     if (!isGlossariActive) {
         await sendStatusMessage('error', 'Glossari is currently off. Click the icon to turn it on.');
         return;
     }
-    
+
     const selectedText = info.selectionText.trim();
     if (!selectedText) {
         await sendStatusMessage('error', 'No text selected for context menu action.');
@@ -362,116 +313,40 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     if (info.menuItemId === "defineWord") {
         await handleDefineMyMemory(selectedText, tab.id);
-    } else if (info.menuItemId === "sendSelectionToAnki") {
-        try {
-            const { fullSentenceForAnki } = await chrome.storage.local.get('fullSentenceForAnki');
-            let fullSentence = fullSentenceForAnki;
-
-            if (!fullSentence) {
-                const [tabResult] = await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    function: () => {
-                        const selection = window.getSelection();
-                        if (selection.rangeCount === 0) return null;
-                        const range = selection.getRangeAt(0);
-                        let container = range.startContainer;
-                        while (container && container.nodeType !== Node.ELEMENT_NODE) {
-                            container = container.parentNode;
-                        }
-                        if (!container) return range.toString();
-                        let parent = container;
-                        while (parent && parent !== document.body) {
-                            const tagName = parent.tagName.toLowerCase();
-                            if (['p', 'div', 'li', 'h1', 'h2', 'h3', 'blockquote', 'td', 'th', 'article', 'section'].includes(tagName)) {
-                                return parent.innerText.replace(/\s+/g, ' ').trim();
-                            }
-                            parent = parent.parentNode;
-                        }
-                        return range.toString();
-                    }
-                });
-                fullSentence = tabResult?.result || selectedText;
-            }
-            
-            await createAnkiFlashcard({
-                selectedWord: selectedText,
-                fullSentence: fullSentence
-            });
-            await chrome.storage.local.remove(['selectedWordForAnki', 'fullSentenceForAnki']);
-
-        } catch (error) {
-            console.error("Error sending context menu selection to Anki:", error);
-            await sendStatusMessage('error', `Failed to send to Anki: ${error.message}`);
-        }
     } else if (info.menuItemId === "translateSentenceGemini") {
-        const { fullSentenceForAnki } = await chrome.storage.local.get('fullSentenceForAnki');
-        let fullSentence = fullSentenceForAnki;
-
-        if (!fullSentence) {
-             const [tabResult] = await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                function: () => {
-                    const selection = window.getSelection();
-                    if (selection.rangeCount === 0) return null;
-                    const range = selection.getRangeAt(0);
-                    let container = range.startContainer;
-                    while (container && container.nodeType !== Node.ELEMENT_NODE) {
-                        container = container.parentNode;
-                    }
-                    if (!container) return range.toString();
-                    let parent = container;
-                    while (parent && parent !== document.body) {
-                        const tagName = parent.tagName.toLowerCase();
-                        if (['p', 'div', 'li', 'h1', 'h2', 'h3', 'blockquote', 'td', 'th', 'article', 'section'].includes(tagName)) {
-                            return parent.innerText.replace(/\s+/g, ' ').trim();
-                        }
-                        parent = parent.parentNode;
-                    }
-                    return range.toString();
-                }
-            });
-            fullSentence = tabResult?.result || selectedText;
-        }
-
-        if (!fullSentence || fullSentence.length < selectedText.length) {
-            fullSentence = selectedText;
+        const fullSentence = await getFullSentenceForSelection(tab.id, selectedText);
+        if (fullSentence.length < selectedText.length) {
             await sendStatusMessage('error', 'Could not determine full sentence context for translation. Translating selected text only.');
         }
-
         await handleTranslateGemini(selectedText, fullSentence, tab.id);
     }
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === "createAnkiFlashcard") {
-        createAnkiFlashcard(request).then(() => {
+    const actions = {
+        "createAnkiFlashcard": createAnkiFlashcard,
+        "createVocabFlashcard": createVocabFlashcard
+    };
+
+    if (actions[request.action]) {
+        actions[request.action](request).then(() => {
             chrome.storage.local.remove(['selectedWordForAnki', 'fullSentenceForAnki']);
         });
         return true; // Indicates an asynchronous response.
-    }
-    else if (request.action === "createVocabFlashcard") {
-        createVocabFlashcard(request).then(() => {
-            chrome.storage.local.remove(['selectedWordForAnki', 'fullSentenceForAnki']);
-        });
-        return true; // Indicates an asynchronous response.
-    }
-    else if (request.action === "getInitialState") {
+    } else if (request.action === "getInitialState") {
         chrome.storage.local.get('isGlossariActive').then(data => {
             sendResponse({ isActive: data.isGlossariActive });
         });
-        return true; // Indicates an asynchronous response.
+        return true;
     }
-    return false; // No other messages handled asynchronously.
+    return false;
 });
 
-
 chrome.commands.onCommand.addListener(async (command) => {
-    const { isGlossariActive } = await chrome.storage.local.get('isGlossariActive');
+    const { isGlossariActive, selectedWordForAnki, fullSentenceForAnki } = await chrome.storage.local.get(['isGlossariActive', 'selectedWordForAnki', 'fullSentenceForAnki']);
     if (!isGlossariActive) return;
-    
-    const { selectedWordForAnki, fullSentenceForAnki } = await chrome.storage.local.get(['selectedWordForAnki', 'fullSentenceForAnki']);
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !tab.id) {
         console.warn('No active tab found for command:', command);
         return;
@@ -482,16 +357,17 @@ chrome.commands.onCommand.addListener(async (command) => {
         return;
     }
 
-    if (command === "send-to-anki") {
-        chrome.tabs.sendMessage(tab.id, {
+    const commandActions = {
+        "send-to-anki": () => chrome.tabs.sendMessage(tab.id, {
             action: "showAnkiTrimmer",
             selectedWord: selectedWordForAnki,
             fullSentence: fullSentenceForAnki
-        });
+        }),
+        "define-selected-text": () => handleDefineMyMemory(selectedWordForAnki, tab.id),
+        "translate-sentence": () => handleTranslateGemini(selectedWordForAnki, fullSentenceForAnki, tab.id)
+    };
 
-    } else if (command === "define-selected-text") {
-        await handleDefineMyMemory(selectedWordForAnki, tab.id);
-    } else if (command === "translate-sentence") {
-        await handleTranslateGemini(selectedWordForAnki, fullSentenceForAnki, tab.id);
+    if (commandActions[command]) {
+        commandActions[command]();
     }
 });
