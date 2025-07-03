@@ -11,13 +11,22 @@ console.log("Glossari background service worker loaded with all features!");
 
 // Function to update the icon based on the current state
 async function updateIcon(isActive) {
-    const path = isActive ? "icons/icon_active.png" : "icons/icon128.png";
-    // To make this work, you'll need to add an "icon_active.png" to your icons folder.
-    // For now, it will gracefully fail and use the default if not found.
+    const iconPaths = isActive
+        ? {
+            "16": "icons/icon-active16.png",
+            "48": "icons/icon-active48.png",
+            "128": "icons/icon-active128.png"
+          }
+        : {
+            "16": "icons/icon16.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
+          };
+          
     try {
-        await chrome.action.setIcon({ path: path });
+        await chrome.action.setIcon({ path: iconPaths });
     } catch (error) {
-        console.warn("Could not set active icon. Make sure 'icons/icon_active.png' exists.");
+        console.warn("Could not set active icon. Make sure all icon sizes exist in the 'icons' folder.");
     }
 }
 
@@ -65,6 +74,9 @@ chrome.action.onClicked.addListener(async (tab) => {
     // Notify the content script in the active tab to update its state
     if (tab.id) {
         chrome.tabs.sendMessage(tab.id, { action: "updateState", isActive: newState });
+        
+        // NEW: Send a message to the content script to show the activation/deactivation popup
+        chrome.tabs.sendMessage(tab.id, { action: "showActivationPopup", isActive: newState });
     }
 });
 
@@ -230,7 +242,7 @@ async function handleDefineMyMemory(selectedText, tabId) {
         chrome.scripting.executeScript({
             target: { tabId: tabId },
             function: displayResultOnPage,
-            args: [selectedText, 'Translation', definition, isDarkMode] // NEW: Pass isDarkMode
+            args: [selectedText, 'MyMemory', definition, isDarkMode] // NEW: Pass isDarkMode
         });
 
     } catch (error) {
@@ -266,7 +278,8 @@ async function handleTranslateGemini(selectedText, fullSentence, tabId) {
         const aiResponse = await fetch(geminiApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: aiPrompt }] }] })
+            // ***FIXED***: Changed aiPrompt to the correct variable name, translationPrompt
+            body: JSON.stringify({ contents: [{ parts: [{ text: translationPrompt }] }] })
         });
         const aiData = await aiResponse.json();
         if (!aiResponse.ok || !aiData.candidates) throw new Error(aiData.error?.message || "AI API request failed for translation.");
@@ -283,7 +296,7 @@ async function handleTranslateGemini(selectedText, fullSentence, tabId) {
         chrome.scripting.executeScript({
             target: { tabId: tabId },
             function: displayResultOnPage,
-            args: [selectedText, 'Translation', fullSentenceTranslatedAndBolded, isDarkMode] // NEW: Pass isDarkMode
+            args: [selectedText, model, fullSentenceTranslatedAndBolded, isDarkMode] // NEW: Pass isDarkMode
         });
 
     } catch (error) {

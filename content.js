@@ -36,6 +36,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         showAnkiTrimmer(request.selectedWord, request.fullSentence);
         sendResponse({ success: true });
     }
+    // NEW: Listen for the activation popup message
+    else if (request.action === "showActivationPopup") {
+        showActivationPopup(request.isActive);
+        sendResponse({ success: true });
+    }
 });
 
 // --- INITIALIZATION ---
@@ -43,10 +48,51 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 chrome.runtime.sendMessage({ action: "getInitialState" }, (response) => {
     if (chrome.runtime.lastError) {
         console.error("Could not get initial state:", chrome.runtime.lastError);
-    } else {
+    } else if (response) {
         setGlossariState(response.isActive);
     }
 });
+
+
+/**
+ * NEW: Displays a temporary notification that the extension has been turned on or off.
+ * @param {boolean} isActive - The new state of the extension.
+ */
+function showActivationPopup(isActive) {
+    // Remove any previous popup to avoid duplicates
+    let existingPopup = document.getElementById('glossari-activation-popup');
+    if (existingPopup) {
+        existingPopup.remove();
+    }
+
+    const popup = document.createElement('div');
+    popup.id = 'glossari-activation-popup';
+    const message = `Glossari is now <strong>${isActive ? 'ON' : 'OFF'}</strong>`;
+
+    popup.innerHTML = `
+        <span>${message}</span>
+        <button class="close-btn" title="Dismiss">&times;</button>
+    `;
+
+    document.body.appendChild(popup);
+
+    const closeBtn = popup.querySelector('.close-btn');
+
+    // Set a timer to remove the element from the DOM after the animation completes
+    const removalTimeout = setTimeout(() => {
+        if (popup.parentNode) {
+            popup.remove();
+        }
+    }, 4000); // 4 seconds total duration
+
+    // If the user clicks the 'x', remove it immediately and clear the timer
+    closeBtn.addEventListener('click', () => {
+        clearTimeout(removalTimeout);
+        if (popup.parentNode) {
+            popup.remove();
+        }
+    });
+}
 
 
 /**
