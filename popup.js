@@ -7,6 +7,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Get reference to the dark mode toggle
     const darkModeToggle = document.getElementById('darkModeToggle');
 
+    // Get references for Anki settings
+    const sentenceDeckInput = document.getElementById('sentenceDeckInput');
+    const vocabDeckInput = document.getElementById('vocabDeckInput');
+    const saveAnkiSettingsBtn = document.getElementById('saveAnkiSettingsBtn');
+    const ankiSettingsStatusDiv = document.getElementById('ankiSettingsStatus');
+
     // --- Gemini API Key Storage Logic ---
 
     const loadApiKey = async () => {
@@ -26,8 +32,6 @@ document.addEventListener('DOMContentLoaded', () => {
             apiKeyStatusDiv.style.color = 'red';
         }
     };
-
-    loadApiKey();
 
     saveApiKeyBtn.addEventListener('click', async () => {
         const apiKey = geminiApiKeyInput.value.trim();
@@ -78,5 +82,46 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Anki Deck Settings Logic ---
+    const loadAnkiSettings = async () => {
+        try {
+            // Get the saved deck names from local storage.
+            const result = await chrome.storage.local.get(['sentenceDeck', 'vocabDeck']);
+            // Set the input values, providing default names if none are found.
+            sentenceDeckInput.value = result.sentenceDeck || 'Glossari Sentences';
+            vocabDeckInput.value = result.vocabDeck || 'Glossari Vocab';
+        } catch (error) {
+            console.error("Error loading Anki settings:", error);
+            ankiSettingsStatusDiv.textContent = 'Error loading deck settings.';
+            ankiSettingsStatusDiv.style.color = 'red';
+        }
+    };
+
+    saveAnkiSettingsBtn.addEventListener('click', async () => {
+        const sentenceDeck = sentenceDeckInput.value.trim();
+        const vocabDeck = vocabDeckInput.value.trim();
+
+        // Ensure both fields have values before saving.
+        if (sentenceDeck && vocabDeck) {
+            try {
+                await chrome.storage.local.set({ sentenceDeck: sentenceDeck, vocabDeck: vocabDeck });
+                ankiSettingsStatusDiv.textContent = 'Anki settings saved successfully!';
+                ankiSettingsStatusDiv.style.color = 'green';
+            } catch (error) {
+                console.error("Error saving Anki settings:", error);
+                ankiSettingsStatusDiv.textContent = 'Error saving deck settings.';
+                ankiSettingsStatusDiv.style.color = 'red';
+            }
+        } else {
+            ankiSettingsStatusDiv.textContent = 'Please enter names for both decks.';
+            ankiSettingsStatusDiv.style.color = 'red';
+        }
+    });
+
+
+    // --- Initial Loading ---
+    // Load all settings when the popup opens.
+    loadApiKey();
     loadThemePreference();
+    loadAnkiSettings();
 });

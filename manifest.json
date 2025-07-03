@@ -11,7 +11,8 @@
   ],
   "host_permissions": [
     "<all_urls>",
-    "https://api.mymemory.translated.net/"
+    "https://api.mymemory.translated.net/",
+    "http://localhost:8765/"
   ],
   "background": {
     "service_worker": "background.js",

@@ -84,18 +84,59 @@ function displayResultOnPage(word, label, text, isDarkModeActive) {
     });
 }
 
+
 /**
- * Creates a standard sentence flashcard.
+ * NEW: Checks if an Anki deck exists and creates it if it doesn't.
+ * @param {string} deckName - The name of the deck to ensure exists.
+ * @returns {Promise<void>}
+ */
+async function ensureDeckExists(deckName) {
+    try {
+        const response = await fetch("http://127.0.0.1:8765", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: "deckNames", version: 6 })
+        });
+        const result = await response.json();
+        if (result.error) {
+            throw new Error(`AnkiConnect: ${result.error}`);
+        }
+        if (!result.result.includes(deckName)) {
+            const createDeckResult = await fetch("http://127.0.0.1:8765", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: "createDeck", version: 6, params: { deck: deckName } })
+            });
+            const createResult = await createDeckResult.json();
+            if (createResult.error) {
+                throw new Error(`AnkiConnect could not create deck: ${createResult.error}`);
+            }
+            console.log(`Deck "${deckName}" was created successfully.`);
+        }
+    } catch (error) {
+        throw new Error(`Failed to ensure deck "${deckName}" exists. Is Anki running? Error: ${error.message}`);
+    }
+}
+
+
+/**
+ * UPDATED: Creates a standard sentence flashcard.
  * @param {object} cardData
  */
 async function createAnkiFlashcard({ selectedWord, fullSentence, frontContent }) {
     try {
-        const { geminiApiKey } = await chrome.storage.local.get('geminiApiKey');
+        // UPDATED: Get the sentenceDeck name from storage.
+        const { geminiApiKey, sentenceDeck } = await chrome.storage.local.get(['geminiApiKey', 'sentenceDeck']);
+        const targetDeck = sentenceDeck || 'Glossari Sentences'; // Use saved deck or fallback.
+
         if (!geminiApiKey) throw new Error("Gemini API Key is not set.");
+
+        // UPDATED: Ensure the target deck exists before proceeding.
+        await ensureDeckExists(targetDeck);
 
         const contextForAI = fullSentence;
         const ankiFront = frontContent || fullSentence;
-        const model = "gemini-2.0-flash";
+        const model = "gemini-1.5-flash-latest";
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
         const aiPrompt = `What is the meaning of the French phrase or word "${selectedWord}" as it is used in the sentence: "${contextForAI}"? Provide a concise, single-phrase English definition suitable for the back of an n+1 flashcard. Do not include any introductory phrases or additional context. Do not restate ${selectedWord}. Example: for 'maison', you would output 'house'.`;
 
@@ -109,9 +150,11 @@ async function createAnkiFlashcard({ selectedWord, fullSentence, frontContent })
 
         let definition = aiData.candidates[0].content.parts[0].text.trim().toLowerCase();
         const ankiBack = `<strong>${selectedWord}</strong> = ${definition}`;
+
+        // UPDATED: Use the targetDeck variable for the deckName.
         const ankiPayload = {
             action: "addNote", version: 6,
-            params: { note: { deckName: "Glossari", modelName: "Obsidian-basic", fields: { "Front": ankiFront, "Back": ankiBack }, tags: ["français"] } }
+            params: { note: { deckName: targetDeck, modelName: "basic", fields: { "Front": ankiFront, "Back": ankiBack }, tags: ["français"] } }
         };
 
         const ankiResultResponse = await fetch("http://127.0.0.1:8765", {
@@ -120,20 +163,30 @@ async function createAnkiFlashcard({ selectedWord, fullSentence, frontContent })
         const ankiResult = await ankiResultResponse.json();
         if (ankiResult.error) throw new Error(`AnkiConnect: ${ankiResult.error}`);
         console.log("Anki card added successfully:", ankiResult.result);
-        await sendStatusMessage('success', `Sentence card for "<strong>${selectedWord}</strong>" created!`);
+        await sendStatusMessage('success', `Sentence card for "<strong>${selectedWord}</strong>" created in deck "<strong>${targetDeck}</strong>"!`);
     } catch (error) {
         console.error("Glossari Flashcard Creation Error:", error.message);
         await sendStatusMessage('error', `Error: ${error.message}`);
     }
 }
 
+/**
+ * UPDATED: Creates a vocabulary flashcard.
+ * @param {object} cardData
+ */
 async function createVocabFlashcard({ selectedWord, sentence }) {
     try {
-        const { geminiApiKey } = await chrome.storage.local.get('geminiApiKey');
+        // UPDATED: Get the vocabDeck name from storage.
+        const { geminiApiKey, vocabDeck } = await chrome.storage.local.get(['geminiApiKey', 'vocabDeck']);
+        const targetDeck = vocabDeck || 'Glossari Vocab'; // Use saved deck or fallback.
+
         if (!geminiApiKey) throw new Error("Gemini API Key is not set.");
 
+        // UPDATED: Ensure the target deck exists before proceeding.
+        await ensureDeckExists(targetDeck);
+
         // --- Step 1: Get Contextual Meaning from Gemini ---
-        const model = "gemini-2.0-flash";
+        const model = "gemini-1.5-flash-latest";
         const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`;
         const contextualPrompt = `Analyze the French word "${selectedWord}" in the context of the sentence: "${sentence}". Provide a concise English definition for the word as it's used in that specific sentence. Return only the definition of "${selectedWord}", with no introductory phrases.`;
 
@@ -147,7 +200,6 @@ async function createVocabFlashcard({ selectedWord, sentence }) {
             throw new Error(geminiData.error?.message || "Gemini API request failed.");
         }
         
-        // Get the definition and remove any trailing full stop.
         let contextualMeaning = geminiData.candidates[0].content.parts[0].text.trim();
         contextualMeaning = contextualMeaning.replace(/\.$/, "");
 
@@ -162,7 +214,6 @@ async function createVocabFlashcard({ selectedWord, sentence }) {
             const uniqueTranslations = new Set();
             myMemoryData.matches.forEach(match => {
                 const translation = match.translation;
-                // Keep comparisons case-insensitive to effectively filter duplicates.
                 if (translation.toLowerCase() !== contextualMeaning.toLowerCase() && translation.toLowerCase() !== selectedWord.toLowerCase()) {
                     uniqueTranslations.add(translation);
                 }
@@ -172,40 +223,24 @@ async function createVocabFlashcard({ selectedWord, sentence }) {
 
         // --- Step 3: Format the Anki card content ---
         const ankiFront = selectedWord;
-
-        // Helper function to escape special characters for use in a regular expression.
-        const escapeRegExp = (string) => {
-            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
-        };
+        const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regex = new RegExp(`\\b(${escapeRegExp(selectedWord)})\\b`, 'gi');
         const formattedSentence = sentence.replace(regex, '<b>$1</b>');
 
-        let ankiBack = `<div><em>${formattedSentence}</em></div>`;
-
-        // Add a horizontal rule to separate sections.
-        ankiBack += `<hr>`; 
-
-        // Add the definition in its own block.
-        ankiBack += `<div><b>${selectedWord}</b> = ${contextualMeaning}</div>`;
-
-        // Add other meanings, with space above and its own block.
+        let ankiBack = `<div><em>${formattedSentence}</em></div><hr><div><b>${selectedWord}</b> = ${contextualMeaning}</div>`;
         if (otherMeanings.length > 0) {
-            ankiBack += `<br><div><b>MyMemory:</b></div><ul>`;
-            otherMeanings.forEach(meaning => {
-                ankiBack += `<li>${meaning}</li>`;
-            });
-            ankiBack += '</ul>';
+            ankiBack += `<br><div><b>MyMemory:</b></div><ul>${otherMeanings.map(m => `<li>${m}</li>`).join('')}</ul>`;
         }
 
-
         // --- Step 4: Send the formatted note to Anki ---
+        // UPDATED: Use the targetDeck variable for the deckName.
         const ankiPayload = {
             action: "addNote",
             version: 6,
             params: {
                 note: {
-                    deckName: "Glossari",
-                    modelName: "Obsidian-basic",
+                    deckName: targetDeck,
+                    modelName: "basic",
                     fields: { "Front": ankiFront, "Back": ankiBack },
                     tags: ["français", "vocab"]
                 }
@@ -219,7 +254,7 @@ async function createVocabFlashcard({ selectedWord, sentence }) {
         const ankiResult = await ankiResultResponse.json();
         if (ankiResult.error) throw new Error(`AnkiConnect: ${ankiResult.error}`);
 
-        await sendStatusMessage('success', `Vocab card for "<strong>${selectedWord}</strong>" created!`);
+        await sendStatusMessage('success', `Vocab card for "<strong>${selectedWord}</strong>" created in deck "<strong>${targetDeck}</strong>"!`);
 
     } catch (error) {
         console.error("Glossari Vocab Card Creation Error:", error.message);
@@ -412,21 +447,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         createAnkiFlashcard(request).then(() => {
             chrome.storage.local.remove(['selectedWordForAnki', 'fullSentenceForAnki']);
         });
-        return true;
+        return true; // Indicates an asynchronous response.
     }
     else if (request.action === "createVocabFlashcard") {
         createVocabFlashcard(request).then(() => {
             chrome.storage.local.remove(['selectedWordForAnki', 'fullSentenceForAnki']);
         });
-        return true;
+        return true; // Indicates an asynchronous response.
     }
     else if (request.action === "getInitialState") {
         chrome.storage.local.get('isGlossariActive').then(data => {
             sendResponse({ isActive: data.isGlossariActive });
         });
-        return true;
+        return true; // Indicates an asynchronous response.
     }
-    return true;
+    return false; // No other messages handled asynchronously.
 });
 
 
