@@ -1,12 +1,12 @@
 // background.js
 
 import { convertMarkdownBoldToHtml, callGeminiAPI } from './utils.js';
-import { createAnkiFlashcard, createVocabFlashcard } from './anki.js';
+import { createSentenceFlashcard, createVocabFlashcard } from './anki.js';
 
 console.log("Glossari background service worker loaded!");
 
 // =================================================================================
-// SECTION 0: STATE MANAGEMENT & INITIALIZATION
+// SECTION 0: STATE MANAGEMENT & INITIALIZATION (No changes in this section)
 // =================================================================================
 
 async function updateIcon(isActive) {
@@ -39,15 +39,19 @@ async function handleCardCreation(cardCreator, cardData, tabId) {
         const { geminiApiKey, sentenceDeck, vocabDeck } = await chrome.storage.local.get(['geminiApiKey', 'sentenceDeck', 'vocabDeck']);
         if (!geminiApiKey) throw new Error("Gemini API Key is not set. Please set it in the Glossari settings.");
 
-        // Ensure the full sentence is available for card creation
+        // Always get the full, original sentence from the page for the best AI context.
         const fullSentence = await getFullSentenceForSelection(tabId, cardData.selectedWord);
+
+        // Prepare a comprehensive data object. The card creator functions will pick what they need.
         const completeCardData = {
-            ...cardData,
+            selectedWord: cardData.selectedWord,
             fullSentence: fullSentence,
-            sentence: fullSentence // for vocab cards
+            // Pass along the trimmed content if it exists.
+            frontContent: cardData.frontContent, // For sentence cards
+            exampleSentence: cardData.sentence,      // For vocab cards (from the trimmer)
         };
 
-        const deckSetting = cardCreator === createAnkiFlashcard ? sentenceDeck : vocabDeck;
+        const deckSetting = cardCreator === createSentenceFlashcard ? sentenceDeck : vocabDeck;
         const result = await cardCreator(completeCardData, geminiApiKey, deckSetting);
 
         await sendStatusMessage('success', `Card for "<strong>${result.word}</strong>" created in deck "<strong>${result.deck}</strong>"!`);
@@ -56,6 +60,7 @@ async function handleCardCreation(cardCreator, cardData, tabId) {
         await sendStatusMessage('error', `Error: ${error.message}`);
     }
 }
+
 
 async function handleDefineMyMemory(selectedText, tabId) {
     try {
@@ -118,7 +123,7 @@ async function handleTranslateGemini(selectedText, fullSentence, tabId) {
 }
 
 // =================================================================================
-// SECTION 2: LISTENERS (EVENTS)
+// SECTION 2: LISTENERS (EVENTS) (No changes in this section)
 // =================================================================================
 
 chrome.action.onClicked.addListener(async (tab) => {
@@ -160,7 +165,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const actions = {
-        "createAnkiFlashcard": (req) => handleCardCreation(createAnkiFlashcard, req, sender.tab.id),
+        "createSentenceFlashcard": (req) => handleCardCreation(createSentenceFlashcard, req, sender.tab.id),
         "createVocabFlashcard": (req) => handleCardCreation(createVocabFlashcard, req, sender.tab.id),
         "getInitialState": () => chrome.storage.local.get('isGlossariActive').then(sendResponse),
         // Add this new case to handle the request from the trim buttons
@@ -210,7 +215,7 @@ chrome.commands.onCommand.addListener(async (command) => {
 
 
 // =================================================================================
-// SECTION 3: UTILITY & SCRIPTING FUNCTIONS
+// SECTION 3: UTILITY & SCRIPTING FUNCTIONS (No changes in this section)
 // =================================================================================
 
 async function sendStatusMessage(status, message) {

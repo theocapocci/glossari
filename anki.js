@@ -3,7 +3,7 @@
 import { callGeminiAPI } from './utils.js';
 
 // =================================================================================
-// ANKI CONNECT HELPERS
+// ANKI CONNECT HELPERS (No changes in this section)
 // =================================================================================
 
 /**
@@ -82,11 +82,22 @@ async function ensureDeckExists(deckName) {
  * @param {string} sentenceDeck - The target deck name.
  * @returns {Promise<{deck: string, word: string}>}
  */
-export async function createAnkiFlashcard({ selectedWord, fullSentence, frontContent }, geminiApiKey, sentenceDeck) {
+export async function createSentenceFlashcard({ selectedWord, fullSentence, frontContent }, geminiApiKey, sentenceDeck) {
     const targetDeck = sentenceDeck || 'Glossari Sentences';
     await ensureDeckExists(targetDeck);
+    
+    // Use frontContent if provided, otherwise default to the full sentence.
+    const sentenceForFront = frontContent || fullSentence;
 
-    const ankiFront = frontContent || fullSentence;
+    // Create a regular expression to find the selected word as a whole word, case-insensitively.
+    const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\\b(${escapeRegExp(selectedWord)})\\b`, 'gi');
+    
+    // Replace the selectedWord in the fullSentence with a bolded version.
+    const formattedSentence = sentenceForFront.replace(regex, '<b>$1</b>');
+
+    const ankiFront = formattedSentence
+
     const aiPrompt = `What is the meaning of the French phrase or word "${selectedWord}" as it is used in the sentence: "${fullSentence}"? Provide a concise, single-phrase English definition suitable for the back of an n+1 flashcard. Do not include any introductory phrases or additional context. Do not restate ${selectedWord}. Example: for 'maison', you would output 'house'.`;
 
     const definition = await callGeminiAPI(aiPrompt, geminiApiKey);
@@ -98,17 +109,17 @@ export async function createAnkiFlashcard({ selectedWord, fullSentence, frontCon
 
 /**
  * Creates a vocabulary flashcard.
- * @param {object} cardData - { selectedWord, sentence }
+ * @param {object} cardData - { selectedWord, fullSentence, exampleSentence }
  * @param {string} geminiApiKey
  * @param {string} vocabDeck - The target deck name.
  * @returns {Promise<{deck: string, word: string}>}
  */
-export async function createVocabFlashcard({ selectedWord, sentence }, geminiApiKey, vocabDeck) {
+export async function createVocabFlashcard({ selectedWord, fullSentence, exampleSentence }, geminiApiKey, vocabDeck) {
     const targetDeck = vocabDeck || 'Glossari Vocab';
     await ensureDeckExists(targetDeck);
 
-    // --- Step 1: Get Contextual Meaning from Gemini ---
-    const contextualPrompt = `Analyze the French word "${selectedWord}" in the context of the sentence: "${sentence}". Provide a concise English definition for the word as it's used in that specific sentence. Return only the definition of "${selectedWord}", with no introductory phrases.`;
+    // --- Step 1: Get Contextual Meaning from Gemini using the FULL sentence ---
+    const contextualPrompt = `Analyze the French word "${selectedWord}" in the context of the sentence: "${fullSentence}". Provide a concise English definition for the word as it's used in that specific sentence. Return only the definition of "${selectedWord}", with no introductory phrases.`;
     let contextualMeaning = await callGeminiAPI(contextualPrompt, geminiApiKey);
     contextualMeaning = contextualMeaning.replace(/\.$/, ""); // Remove trailing period if any
 
@@ -132,9 +143,12 @@ export async function createVocabFlashcard({ selectedWord, sentence }, geminiApi
 
     // --- Step 3: Format the Anki card content ---
     const ankiFront = selectedWord;
+    
+    // Use the user-edited exampleSentence if it exists, otherwise fall back to the fullSentence.
+    const sentenceForBack = exampleSentence || fullSentence;
     const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`\\b(${escapeRegExp(selectedWord)})\\b`, 'gi');
-    const formattedSentence = sentence.replace(regex, '<b>$1</b>');
+    const formattedSentence = sentenceForBack.replace(regex, '<b>$1</b>');
 
     let ankiBack = `<div><em>${formattedSentence}</em></div><hr><div><b>${selectedWord}</b> = ${contextualMeaning}</div>`;
     if (otherMeanings.length > 0) {

@@ -96,7 +96,7 @@ function showAnkiTrimmer(selectedWord, fullSentence) {
         const trimmedSentence = displayDiv.querySelector('.glossari-body').innerText.trim();
         if (trimmedSentence) {
             chrome.runtime.sendMessage({
-                action: "createAnkiFlashcard",
+                action: "createSentenceFlashcard",
                 selectedWord: selectedWord,
                 frontContent: trimmedSentence
             });
@@ -175,7 +175,7 @@ function showSelectionActionPanel(selectedWord) {
 
     // --- Event Listeners ---
     panel.querySelector('#glossari-create-sentence-btn').addEventListener('click', () => {
-        chrome.runtime.sendMessage({ action: "createAnkiFlashcard", selectedWord: selectedWord });
+        chrome.runtime.sendMessage({ action: "createSentenceFlashcard", selectedWord: selectedWord });
         panel.remove();
     });
 
