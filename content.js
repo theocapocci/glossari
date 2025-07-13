@@ -25,7 +25,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const actions = {
         "updateState": (req) => setGlossariState(req.isActive),
         "showStatus": (req) => showStatusDisplay(req.status, req.message),
-        "showAnkiTrimmer": (req) => showAnkiTrimmer(req.selectedWord, req.fullSentence),
+        "showSentenceCardEditor": (req) => showSentenceCardEditor(req.selectedWord, req.fullSentence),
         "showActivationPopup": (req) => showActivationPopup(req.isActive)
     };
 
@@ -86,7 +86,7 @@ function createDisplayBox(id, headerContent, bodyContent, footerContent) {
  * @param {string} selectedWord
  * @param {string} fullSentence
  */
-function showAnkiTrimmer(selectedWord, fullSentence) {
+function showSentenceCardEditor(selectedWord, fullSentence) {
     const header = `<strong>Trim Sentence Card Front</strong><span class="glossari-label">${selectedWord}</span>`;
     const body = `<div contenteditable="true">${fullSentence}</div>`;
     const footer = `<button id="glossari-cancel-btn">Cancel</button><button id="glossari-confirm-btn">Confirm</button>`;
@@ -98,7 +98,7 @@ function showAnkiTrimmer(selectedWord, fullSentence) {
             chrome.runtime.sendMessage({
                 action: "createSentenceFlashcard",
                 selectedWord: selectedWord,
-                frontContent: trimmedSentence
+                selectedContent: trimmedSentence
             });
         }
         displayDiv.remove();
@@ -184,7 +184,7 @@ function showSelectionActionPanel(selectedWord) {
         // Ask the background script for the sentence, then show trimmer
         chrome.runtime.sendMessage({ action: "getFullSentence", selectedWord: selectedWord }, (fullSentence) => {
             if (fullSentence) {
-                showAnkiTrimmer(selectedWord, fullSentence);
+                showSentenceCardEditor(selectedWord, fullSentence);
             }
         });
     });
@@ -212,13 +212,34 @@ function showSelectionActionPanel(selectedWord) {
  * @param {MouseEvent} event
  */
 async function handleTextSelection(event) {
-    if (event.target.closest('#glossari-display, #glossari-selection-panel')) return;
-    if (event.target.tagName === 'A' || event.target.tagName === 'BUTTON' || event.target.isContentEditable) {
+    const selection = window.getSelection();
+
+    // Ignore if the selection is empty or doesn't exist.
+    if (!selection || selection.isCollapsed) {
         await chrome.storage.local.remove('selectedWordForAnki');
         return;
     }
 
-    const selectedText = window.getSelection().toString().trim();
+    // Find the deepest element that contains the entire selection.
+    const range = selection.getRangeAt(0);
+    let container = range.commonAncestorContainer;
+    if (container.nodeType !== Node.ELEMENT_NODE) {
+        container = container.parentNode;
+    }
+
+    // *** This is the key change ***
+    // Ignore any selections that originate from within Glossari's own UI.
+    if (container && container.closest('#glossari-display, #glossari-selection-panel')) {
+        return;
+    }
+
+    // Also ignore selections on links, buttons, or editable fields to avoid annoyance.
+    if (event.target.closest('a, button, [contenteditable="true"], input, textarea')) {
+        await chrome.storage.local.remove('selectedWordForAnki');
+        return;
+    }
+
+    const selectedText = selection.toString().trim();
 
     if (selectedText.length > 0 && selectedText.length < 1000) {
         // Store the selected text for keyboard shortcuts to use

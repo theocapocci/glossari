@@ -1,3 +1,6 @@
+11/07/2025
+- [x] Format translated sentence for bold text/
+
 29/06/2025
 
 -   [ ] Extract context of selected text and store this context

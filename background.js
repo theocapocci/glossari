@@ -47,7 +47,7 @@ async function handleCardCreation(cardCreator, cardData, tabId) {
             selectedWord: cardData.selectedWord,
             fullSentence: fullSentence,
             // Pass along the trimmed content if it exists.
-            frontContent: cardData.frontContent, // For sentence cards
+            selectedContent: cardData.selectedContent, // For sentence cards
             exampleSentence: cardData.sentence,      // For vocab cards (from the trimmer)
         };
 
@@ -101,7 +101,7 @@ async function handleTranslateGemini(selectedText, fullSentence, tabId) {
         const { geminiApiKey } = await chrome.storage.local.get('geminiApiKey');
         if (!geminiApiKey) throw new Error("Gemini API Key is not set. Please set it in the Glossari settings.");
 
-        const translationPrompt = `Translate the following French sentence into English: "${fullSentence}". In the translated sentence, please make the English translation of "${selectedText}" bold using HTML <strong> tags. Provide only the translated sentence, without any additional text, quotes, or introductory phrases.`;
+        const translationPrompt = `Translate the following French sentence into English: "${fullSentence}". Provide only the translated sentence, without any additional text, quotes, or introductory phrases.`;
         let translatedSentence = await callGeminiAPI(translationPrompt, geminiApiKey);
         translatedSentence = convertMarkdownBoldToHtml(translatedSentence);
 
@@ -200,7 +200,7 @@ chrome.commands.onCommand.addListener(async (command) => {
 
     const commandActions = {
         "send-to-anki": () => chrome.tabs.sendMessage(tab.id, {
-            action: "showAnkiTrimmer",
+            action: "showSentenceCardEditor",
             selectedWord: selectedWordForAnki,
             fullSentence: fullSentence
         }),

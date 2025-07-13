@@ -41,11 +41,11 @@ async function ankiConnectRequest(action, params = {}) {
  * @param {string[]} tags
  * @returns {Promise<any>}
  */
-async function addAnkiNote(deckName, front, back, tags = []) {
+async function addAnkiNote(deckName, modelName, fields, tags = []) {
     const note = {
         deckName: deckName,
-        modelName: "Basic", // Assuming 'Basic' model, which is standard
-        fields: { Front: front, Back: back },
+        modelName: modelName, 
+        fields: fields,
         tags: tags
     };
     return ankiConnectRequest("addNote", { note });
@@ -76,34 +76,53 @@ async function ensureDeckExists(deckName) {
 
 
 /**
- * Creates a standard sentence flashcard.
- * @param {object} cardData - { selectedWord, fullSentence, frontContent }
+ * Creates an i+1 sentence flashcard.
+ * @param {object} cardData - { selectedWord, fullSentence, selectedContent }
  * @param {string} geminiApiKey
  * @param {string} sentenceDeck - The target deck name.
  * @returns {Promise<{deck: string, word: string}>}
  */
-export async function createSentenceFlashcard({ selectedWord, fullSentence, frontContent }, geminiApiKey, sentenceDeck) {
+export async function createSentenceFlashcard({ selectedWord, fullSentence, selectedContent }, geminiApiKey, sentenceDeck) {
     const targetDeck = sentenceDeck || 'Glossari Sentences';
     await ensureDeckExists(targetDeck);
     
-    // Use frontContent if provided, otherwise default to the full sentence.
-    const sentenceForFront = frontContent || fullSentence;
+    // Use selectedContent if provided, otherwise default to the full sentence.
+    const sentenceForCard = selectedContent || fullSentence;
 
-    // Create a regular expression to find the selected word as a whole word, case-insensitively.
-    const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\b(${escapeRegExp(selectedWord)})\\b`, 'gi');
+    const aiPrompt = `
+    You are an automated translation service for a flashcard application. Your task is to provide a concise English translation of a given French term based on its use in a sentence.
+
+    **French Term:** "${selectedWord}"
+    **Sentence:** "${fullSentence}"
+
+    **Instructions:**
+    1.  Provide the most common, context-appropriate English translation for the term.
+    2.  Your entire response must consist ONLY of the translated text. Do not add any extra words, punctuation, or introductory phrases like "The translation is...".
+    3.  Ensure your translation avoids capitalization, unless the term "${selectedWord}" is at the start "${fullSentence}", or otherwise ought to be capitalized.
+
+    **Examples:**
+    - French Term: 'maison', Sentence: 'La maison est grande'
+    - Output: house
+
+    - French Term: 'Si vous avez', Sentence: 'Si vous avez un vélo, vous serez heureux'
+    - Output: if you have
+
+    - French Term: 'France', Sentence: 'J'habite en France'
+    - Output: France
+    `;
+
+    const translation = await callGeminiAPI(aiPrompt, geminiApiKey);
+
+    // Define the fields for the "i+1" note type.
+    const ankiFields = {
+        "sentence": sentenceForCard,
+        "target word": selectedWord,
+        "translation": translation
+    };
+
+    // Add the new note to Anki using the custom "i+1" model.
+    await addAnkiNote(targetDeck, "i+1", ankiFields, ["français"]);
     
-    // Replace the selectedWord in the fullSentence with a bolded version.
-    const formattedSentence = sentenceForFront.replace(regex, '<b>$1</b>');
-
-    const ankiFront = formattedSentence
-
-    const aiPrompt = `What is the meaning of the French phrase or word "${selectedWord}" as it is used in the sentence: "${fullSentence}"? Provide a concise, single-phrase English definition suitable for the back of an n+1 flashcard. Do not include any introductory phrases or additional context. Do not restate ${selectedWord}. Example: for 'maison', you would output 'house'.`;
-
-    const definition = await callGeminiAPI(aiPrompt, geminiApiKey);
-    const ankiBack = `<strong>${selectedWord}</strong> = ${definition.toLowerCase()}`;
-
-    await addAnkiNote(targetDeck, ankiFront, ankiBack, ["français", "sentence-card"]);
     return { deck: targetDeck, word: selectedWord };
 }
 
