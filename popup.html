@@ -37,6 +37,21 @@
             <div id="ankiSettingsStatus" class="mt-2 text-xs text-center"></div>
         </div>
 
+        <!-- Section for AI Context Settings -->
+        <div class="settings-section">
+            <h2 class="text-lg font-semibold mb-2">AI Context Settings</h2>
+            <p class="text-sm text-gray-600 mb-3">Control how much surrounding text is sent to the AI for better translation context.</p>
+
+            <label for="contextSentencesInput" class="block text-gray-700 text-sm font-medium mb-1">Context Sentences:</label>
+            <input type="number" id="contextSentencesInput" min="0" max="5" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <small class="text-xs text-gray-600">Number of sentences before & after to include (Default: 1).</small>
+
+            <button id="saveContextSettingsBtn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md transition duration-300 ease-in-out shadow-md mt-2">
+                Save Context Settings
+            </button>
+            <div id="contextSettingsStatus" class="mt-2 text-xs text-center"></div>
+        </div>
+
         <!-- Section for Appearance Settings -->
         <div class="settings-section">
             <h2 class="text-lg font-semibold mb-2">Appearance</h2>

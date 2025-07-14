@@ -13,8 +13,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveAnkiSettingsBtn = document.getElementById('saveAnkiSettingsBtn');
     const ankiSettingsStatusDiv = document.getElementById('ankiSettingsStatus');
 
-    // --- Gemini API Key Storage Logic ---
+    // Get references for Context settings
+    const contextSentencesInput = document.getElementById('contextSentencesInput');
+    const saveContextSettingsBtn = document.getElementById('saveContextSettingsBtn');
+    const contextSettingsStatusDiv = document.getElementById('contextSettingsStatus');
 
+
+    // --- Gemini API Key Storage Logic ---
     const loadApiKey = async () => {
         try {
             const result = await chrome.storage.local.get('geminiApiKey');
@@ -35,7 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     saveApiKeyBtn.addEventListener('click', async () => {
         const apiKey = geminiApiKeyInput.value.trim();
-
         if (apiKey) {
             try {
                 await chrome.storage.local.set({ geminiApiKey: apiKey });
@@ -85,9 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Anki Deck Settings Logic ---
     const loadAnkiSettings = async () => {
         try {
-            // Get the saved deck names from local storage.
             const result = await chrome.storage.local.get(['sentenceDeck', 'vocabDeck']);
-            // Set the input values, providing default names if none are found.
             sentenceDeckInput.value = result.sentenceDeck || 'Glossari Sentences';
             vocabDeckInput.value = result.vocabDeck || 'Glossari Vocab';
         } catch (error) {
@@ -100,8 +102,6 @@ document.addEventListener('DOMContentLoaded', () => {
     saveAnkiSettingsBtn.addEventListener('click', async () => {
         const sentenceDeck = sentenceDeckInput.value.trim();
         const vocabDeck = vocabDeckInput.value.trim();
-
-        // Ensure both fields have values before saving.
         if (sentenceDeck && vocabDeck) {
             try {
                 await chrome.storage.local.set({ sentenceDeck: sentenceDeck, vocabDeck: vocabDeck });
@@ -118,10 +118,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- AI Context Settings Logic ---
+    const loadContextSettings = async () => {
+        try {
+            const result = await chrome.storage.local.get('contextSentences');
+            contextSentencesInput.value = result.contextSentences ?? 1; // Default to 1 if not set
+        } catch (error) {
+            console.error("Error loading Context settings:", error);
+            contextSettingsStatusDiv.textContent = 'Error loading context settings.';
+            contextSettingsStatusDiv.style.color = 'red';
+        }
+    };
+
+    saveContextSettingsBtn.addEventListener('click', async () => {
+        const contextSentences = parseInt(contextSentencesInput.value, 10);
+        if (!isNaN(contextSentences)) {
+            try {
+                await chrome.storage.local.set({ contextSentences: contextSentences });
+                contextSettingsStatusDiv.textContent = 'Context settings saved successfully!';
+                contextSettingsStatusDiv.style.color = 'green';
+            } catch (error) {
+                console.error("Error saving Context settings:", error);
+                contextSettingsStatusDiv.textContent = 'Error saving context settings.';
+                contextSettingsStatusDiv.style.color = 'red';
+            }
+        } else {
+            contextSettingsStatusDiv.textContent = 'Please enter a valid number.';
+            contextSettingsStatusDiv.style.color = 'red';
+        }
+    });
+
 
     // --- Initial Loading ---
-    // Load all settings when the popup opens.
     loadApiKey();
     loadThemePreference();
     loadAnkiSettings();
+    loadContextSettings();
 });

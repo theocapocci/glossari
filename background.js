@@ -6,7 +6,7 @@ import { createSentenceFlashcard, createVocabFlashcard } from './anki.js';
 console.log("Glossari background service worker loaded!");
 
 // =================================================================================
-// SECTION 0: STATE MANAGEMENT & INITIALIZATION (No changes in this section)
+// SECTION 0: STATE MANAGEMENT & INITIALIZATION
 // =================================================================================
 
 async function updateIcon(isActive) {
@@ -16,18 +16,16 @@ async function updateIcon(isActive) {
     try {
         await chrome.action.setIcon({ path: iconPaths });
     } catch (error) {
-        console.warn("Could not set active icon. Ensure all icon sizes exist in the 'icons' folder.", error);
+        console.warn("Could not set active icon.", error);
     }
 }
 
 chrome.runtime.onInstalled.addListener(() => {
     chrome.storage.local.set({ isGlossariActive: false });
     updateIcon(false);
-    // Context Menus
     chrome.contextMenus.create({ id: "defineWord", title: "Define '%s' (MyMemory)", contexts: ["selection"] });
     chrome.contextMenus.create({ id: "translateSentenceGemini", title: "Translate Sentence for '%s'", contexts: ["selection"] });
     chrome.contextMenus.create({ id: "glossariSettings", title: "Glossari Settings", contexts: ["action"] });
-    console.log("Context menus created successfully.");
 });
 
 // =================================================================================
@@ -36,19 +34,25 @@ chrome.runtime.onInstalled.addListener(() => {
 
 async function handleCardCreation(cardCreator, cardData, tabId) {
     try {
-        const { geminiApiKey, sentenceDeck, vocabDeck } = await chrome.storage.local.get(['geminiApiKey', 'sentenceDeck', 'vocabDeck']);
+        const { geminiApiKey, sentenceDeck, vocabDeck, contextSentences = 1 } = await chrome.storage.local.get(['geminiApiKey', 'sentenceDeck', 'vocabDeck', 'contextSentences']);
         if (!geminiApiKey) throw new Error("Gemini API Key is not set. Please set it in the Glossari settings.");
 
-        // Always get the full, original sentence from the page for the best AI context.
-        const fullSentence = await getFullSentenceForSelection(tabId, cardData.selectedWord);
+        const { fullSentence, contextualBlock } = await getTextFromPageForSelection(tabId, cardData.selectedWord, contextSentences);
 
-        // Prepare a comprehensive data object. The card creator functions will pick what they need.
+        // --- DEBUGGING LOGS ---
+        console.log("--- Glossari Debug: Data from Page ---");
+        console.log("Selected Word:", cardData.selectedWord);
+        console.log("Full Sentence:", fullSentence);
+        console.log("Contextual Block:", contextualBlock);
+        // --- END DEBUGGING LOGS ---
+
+        // FIX: Pass 'fullSentence' with the correct name.
         const completeCardData = {
             selectedWord: cardData.selectedWord,
-            fullSentence: fullSentence,
-            // Pass along the trimmed content if it exists.
-            selectedContent: cardData.selectedContent, // For sentence cards
-            exampleSentence: cardData.sentence,      // For vocab cards (from the trimmer)
+            contextualBlock: contextualBlock,
+            fullSentence: fullSentence, // This is the single sentence.
+            trimmedSentence: cardData.trimmedSentence,
+            sentence: cardData.sentence,
         };
 
         const deckSetting = cardCreator === createSentenceFlashcard ? sentenceDeck : vocabDeck;
@@ -61,24 +65,17 @@ async function handleCardCreation(cardCreator, cardData, tabId) {
     }
 }
 
-
 async function handleDefineMyMemory(selectedText, tabId) {
     try {
-        const langPair = 'fr|en';
-        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(selectedText)}&langpair=${langPair}`;
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(selectedText)}&langpair=fr|en`;
         const response = await fetch(url);
-        if (!response.ok) throw new Error(`MyMemory API request failed with status: ${response.status}`);
+        if (!response.ok) throw new Error(`MyMemory API request failed: ${response.status}`);
         const data = await response.json();
-
-        if (data.responseStatus !== 200) {
-            throw new Error(data.responseDetails || "MyMemory API error.");
-        }
-
+        if (data.responseStatus !== 200) throw new Error(data.responseDetails || "MyMemory API error.");
         const definition = data.responseData.translatedText;
         if (!definition || definition.toLowerCase() === selectedText.toLowerCase()) {
             throw new Error(`No distinct definition found for "${selectedText}".`);
         }
-
         const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
         chrome.scripting.executeScript({
             target: { tabId: tabId },
@@ -87,24 +84,17 @@ async function handleDefineMyMemory(selectedText, tabId) {
         });
     } catch (error) {
         console.error("Glossari Definition Error (MyMemory):", error.message);
-        const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
-        chrome.scripting.executeScript({
-            target: { tabId: tabId },
-            function: displayResultOnPage,
-            args: [selectedText, 'Error', `Definition Failed: ${error.message}`, isDarkMode]
-        });
+        await sendStatusMessage('error', `Definition Failed: ${error.message}`);
     }
 }
 
-async function handleTranslateGemini(selectedText, fullSentence, tabId) {
+async function handleTranslateGemini(selectedText, sentenceToTranslate, tabId) {
     try {
         const { geminiApiKey } = await chrome.storage.local.get('geminiApiKey');
-        if (!geminiApiKey) throw new Error("Gemini API Key is not set. Please set it in the Glossari settings.");
-
-        const translationPrompt = `Translate the following French sentence into English: "${fullSentence}". Provide only the translated sentence, without any additional text, quotes, or introductory phrases.`;
+        if (!geminiApiKey) throw new Error("Gemini API Key is not set.");
+        const translationPrompt = `Translate the following French sentence into English: "${sentenceToTranslate}". Provide only the translated sentence.`;
         let translatedSentence = await callGeminiAPI(translationPrompt, geminiApiKey);
         translatedSentence = convertMarkdownBoldToHtml(translatedSentence);
-
         const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
         chrome.scripting.executeScript({
             target: { tabId: tabId },
@@ -113,17 +103,12 @@ async function handleTranslateGemini(selectedText, fullSentence, tabId) {
         });
     } catch (error) {
         console.error("Glossari Sentence Translation Error:", error.message);
-        const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
-        chrome.scripting.executeScript({
-            target: { tabId: tabId },
-            function: displayResultOnPage,
-            args: [selectedText, 'Error', `Translation Failed: ${error.message}`, isDarkMode]
-        });
+        await sendStatusMessage('error', `Translation Failed: ${error.message}`);
     }
 }
 
 // =================================================================================
-// SECTION 2: LISTENERS (EVENTS) (No changes in this section)
+// SECTION 2: LISTENERS (EVENTS)
 // =================================================================================
 
 chrome.action.onClicked.addListener(async (tab) => {
@@ -142,80 +127,81 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         chrome.tabs.create({ url: 'popup.html' });
         return;
     }
-
     const { isGlossariActive } = await chrome.storage.local.get('isGlossariActive');
     if (!isGlossariActive) {
-        await sendStatusMessage('error', 'Glossari is currently off. Click the icon to turn it on.');
+        await sendStatusMessage('error', 'Glossari is off. Click the icon to turn it on.');
         return;
     }
-
     const selectedText = info.selectionText ? info.selectionText.trim() : "";
-    if (!selectedText) {
-        await sendStatusMessage('error', 'No text selected for context menu action.');
-        return;
-    }
+    if (!selectedText) return;
 
     if (info.menuItemId === "defineWord") {
         await handleDefineMyMemory(selectedText, tab.id);
     } else if (info.menuItemId === "translateSentenceGemini") {
-        const fullSentence = await getFullSentenceForSelection(tab.id, selectedText);
+        const { fullSentence } = await getTextFromPageForSelection(tab.id, selectedText, 0);
         await handleTranslateGemini(selectedText, fullSentence, tab.id);
     }
 });
+
+chrome.commands.onCommand.addListener(async (command, tab) => {
+    // Make sure this command name matches the one in your manifest.json
+    if (command === "translate-sentence") {
+        try {
+            // We need to get the selected text from the page
+            const [injectionResult] = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: () => window.getSelection().toString(),
+            });
+
+            const selectedText = injectionResult.result ? injectionResult.result.trim() : "";
+            
+            if (!selectedText) {
+                await sendStatusMessage('error', 'Please select text to translate.');
+                return;
+            }
+
+            // Use the existing function to get the full sentence
+            const { fullSentence } = await getTextFromPageForSelection(tab.id, selectedText, 0);
+            
+            if (fullSentence) {
+                // Call the existing translation handler
+                await handleTranslateGemini(selectedText, fullSentence, tab.id);
+            } else {
+                 await sendStatusMessage('error', 'Could not find sentence for selection.');
+            }
+
+        } catch (error) {
+            console.error("Glossari Shortcut Error:", error);
+            await sendStatusMessage('error', `Shortcut Failed: ${error.message}`);
+        }
+    }
+});
+
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const actions = {
         "createSentenceFlashcard": (req) => handleCardCreation(createSentenceFlashcard, req, sender.tab.id),
         "createVocabFlashcard": (req) => handleCardCreation(createVocabFlashcard, req, sender.tab.id),
         "getInitialState": () => chrome.storage.local.get('isGlossariActive').then(sendResponse),
-        // Add this new case to handle the request from the trim buttons
         "getFullSentence": (req) => {
-            getFullSentenceForSelection(sender.tab.id, req.selectedWord)
-                .then(sendResponse); // sendResponse is the callback that gets the sentence
+            getTextFromPageForSelection(sender.tab.id, req.selectedWord, 0)
+                .then(result => sendResponse(result.fullSentence));
+            return true;
         }
     };
 
     if (actions[request.action]) {
         actions[request.action](request);
-        return true; // Indicates an asynchronous response is expected.
+        return true;
     }
     return false;
 });
-chrome.commands.onCommand.addListener(async (command) => {
-    const { isGlossariActive, selectedWordForAnki } = await chrome.storage.local.get(['isGlossariActive', 'selectedWordForAnki']);
-    if (!isGlossariActive) return;
 
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab || !tab.id) {
-        console.warn('No active tab found for command:', command);
-        return;
-    }
 
-    if (!selectedWordForAnki) {
-        await sendStatusMessage('error', 'No text selected. Please highlight a word or phrase first.');
-        return;
-    }
-    
-    const fullSentence = await getFullSentenceForSelection(tab.id, selectedWordForAnki);
-
-    const commandActions = {
-        "send-to-anki": () => chrome.tabs.sendMessage(tab.id, {
-            action: "showSentenceCardEditor",
-            selectedWord: selectedWordForAnki,
-            fullSentence: fullSentence
-        }),
-        "define-selected-text": () => handleDefineMyMemory(selectedWordForAnki, tab.id),
-        "translate-sentence": () => handleTranslateGemini(selectedWordForAnki, fullSentence, tab.id)
-    };
-
-    if (commandActions[command]) {
-        commandActions[command]();
-    }
-});
 
 
 // =================================================================================
-// SECTION 3: UTILITY & SCRIPTING FUNCTIONS (No changes in this section)
+// SECTION 3: UTILITY & SCRIPTING FUNCTIONS
 // =================================================================================
 
 async function sendStatusMessage(status, message) {
@@ -225,25 +211,16 @@ async function sendStatusMessage(status, message) {
             chrome.tabs.sendMessage(tab.id, { action: "showStatus", status: status, message: message });
         }
     } catch (error) {
-        console.error("Failed to send status message to content script:", error);
+        console.error("Failed to send status message:", error);
     }
 }
 
-/** This function is injected into the content script to display results. */
 function displayResultOnPage(word, label, text, isDarkModeActive) {
-    // This function's body is executed in the content script's context.
-    // It cannot access any variables from the background script's scope.
     let glossariDisplay = document.getElementById('glossari-display');
-    if (glossariDisplay) {
-        glossariDisplay.remove();
-    }
+    if (glossariDisplay) glossariDisplay.remove();
     glossariDisplay = document.createElement('div');
     glossariDisplay.id = 'glossari-display';
-    if (isDarkModeActive) {
-        document.body.classList.add('dark-mode');
-    } else {
-        document.body.classList.remove('dark-mode');
-    }
+    if (isDarkModeActive) document.body.classList.add('dark-mode');
     glossariDisplay.innerHTML = `
         <div class="glossari-header">
             <strong>${word}</strong>
@@ -252,75 +229,81 @@ function displayResultOnPage(word, label, text, isDarkModeActive) {
         </div>
         <div class="glossari-body">${text}</div>`;
     document.body.appendChild(glossariDisplay);
-    document.getElementById('glossari-close-btn').addEventListener('click', () => {
-        glossariDisplay.remove();
-    });
+    document.getElementById('glossari-close-btn').addEventListener('click', () => glossariDisplay.remove());
 }
 
-async function getFullSentenceForSelection(tabId, selectedText) {
+async function getTextFromPageForSelection(tabId, selectedText, contextSentences = 0, selectionDetails = null) {
     try {
         const [tabResult] = await chrome.scripting.executeScript({
             target: { tabId: tabId },
-            function: (selectedText) => {
-                // This function is executed in the content script's context.
+            func: (selectedText, contextSentences, details) => {
                 const selection = window.getSelection();
-                if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
-                    return selectedText;
-                }
+                let fullSentence = selectedText;
+                let contextualBlock = selectedText;
 
-                const range = selection.getRangeAt(0);
-                let container = range.commonAncestorContainer;
+                if (details && selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
 
-                // 1. Find the nearest block-level parent element
-                while (container && container.nodeType !== Node.ELEMENT_NODE) {
-                    container = container.parentNode;
-                }
-                while (container && container !== document.body) {
-                    const style = window.getComputedStyle(container);
-                    if (['block', 'list-item', 'table-cell'].includes(style.display)) {
-                        break; // Found a suitable block
+                    // Reconstruct the full text from the common ancestor, or the whole body
+                    const commonAncestor = range.commonAncestorContainer.nodeType === Node.TEXT_NODE ? range.commonAncestorContainer.parentNode : range.commonAncestorContainer;
+                    const allText = commonAncestor.innerText; // or document.body.innerText if commonAncestor is too small
+
+                    // Find the precise start and end index of the *current selection*
+                    const preSelectionRange = range.cloneRange();
+                    preSelectionRange.selectNodeContents(commonAncestor);
+                    preSelectionRange.setEnd(range.startContainer, range.startOffset);
+                    const startIndex = preSelectionRange.toString().length;
+                    const endIndex = startIndex + selectedText.length;
+
+                    // Now, use these indices to find the correct sentence/context
+                    const sentences = allText.match(/[^.!?]+[.!?]+/g) || [allText];
+                    let targetSentenceIndex = -1;
+                    let charCount = 0;
+
+                    for(let i=0; i<sentences.length; i++) {
+                        if(startIndex >= charCount && startIndex < charCount + sentences[i].length) {
+                            targetSentenceIndex = i;
+                            break;
+                        }
+                        charCount += sentences[i].length;
                     }
-                    container = container.parentNode;
-                }
-                container = container || document.body; // Fallback to body
 
-                const blockText = container.innerText;
-                if (!blockText) return selectedText;
-
-                // 2. Find the position of the selected text within the block.
-                const selectionIndex = blockText.indexOf(selectedText);
-                if (selectionIndex === -1) {
-                    return selectedText; // Fallback if selection isn't found (e.g., due to whitespace changes)
-                }
-
-                // 3. Find the start of the sentence by searching backwards.
-                let sentenceStart = 0;
-                for (let i = selectionIndex; i > 0; i--) {
-                    if ('.!?'.includes(blockText[i])) {
-                        sentenceStart = i + 1; // The sentence starts after the punctuation.
-                        break;
+                    if (targetSentenceIndex !== -1) {
+                        fullSentence = sentences[targetSentenceIndex].trim();
+                        const start = Math.max(0, targetSentenceIndex - contextSentences);
+                        const end = Math.min(sentences.length, targetSentenceIndex + contextSentences + 1);
+                        contextualBlock = sentences.slice(start, end).join(' ').trim();
+                    }
+                } else {
+                    // Fallback to original logic if selectionDetails are not provided or invalid
+                    const allText = document.body.innerText;
+                    const selectionIndex = allText.indexOf(selectedText); // This is the problematic part for duplicates
+                    if (selectionIndex !== -1) {
+                         const sentences = allText.match(/[^.!?]+[.!?]+/g) || [allText];
+                        let targetSentenceIndex = -1;
+                        let charCount = 0;
+                        for(let i=0; i<sentences.length; i++) {
+                            if(selectionIndex >= charCount && selectionIndex < charCount + sentences[i].length) {
+                                targetSentenceIndex = i;
+                                break;
+                            }
+                            charCount += sentences[i].length;
+                        }
+                        if (targetSentenceIndex !== -1) {
+                            fullSentence = sentences[targetSentenceIndex].trim();
+                            const start = Math.max(0, targetSentenceIndex - contextSentences);
+                            const end = Math.min(sentences.length, targetSentenceIndex + contextSentences + 1);
+                            contextualBlock = sentences.slice(start, end).join(' ').trim();
+                        }
                     }
                 }
-
-                // 4. Find the end of the sentence by searching forwards.
-                let sentenceEnd = blockText.length;
-                for (let i = selectionIndex + selectedText.length; i < blockText.length; i++) {
-                    if ('.!?'.includes(blockText[i])) {
-                        sentenceEnd = i + 1; // The sentence ends with the punctuation.
-                        break;
-                    }
-                }
-                
-                // 5. Extract and clean up the sentence.
-                const sentence = blockText.substring(sentenceStart, sentenceEnd).trim();
-
-                return sentence.length > 0 ? sentence : selectedText;
+                return { fullSentence, contextualBlock };
             },
-            args: [selectedText]
+            args: [selectedText, contextSentences, selectionDetails] // Pass the details here
         });
-        return tabResult?.result || selectedText;
+        return tabResult?.result || { fullSentence: selectedText, contextualBlock: selectedText };
     } catch (error) {
-        console.error("Could not execute script to get full sentence:", error);
-        return selectedText; // Fallback to the selected text itself
+        console.error("Could not execute script to get text from page:", error);
+        return { fullSentence: selectedText, contextualBlock: selectedText };
     }
 }

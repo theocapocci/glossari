@@ -1,7 +1,7 @@
 // content.js
 console.log("Glossari content script loaded!");
 
-let isGlossariActive = false; // By default, the script is dormant
+let isGlossariActive = false;
 
 // --- STATE MANAGEMENT ---
 function setGlossariState(isActive) {
@@ -9,13 +9,11 @@ function setGlossariState(isActive) {
         if (!isGlossariActive) {
             document.body.addEventListener('mouseup', handleTextSelection);
             isGlossariActive = true;
-            console.log("Glossari activated on this page.");
         }
     } else {
         if (isGlossariActive) {
             document.body.removeEventListener('mouseup', handleTextSelection);
             isGlossariActive = false;
-            console.log("Glossari deactivated on this page.");
         }
     }
 }
@@ -25,7 +23,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const actions = {
         "updateState": (req) => setGlossariState(req.isActive),
         "showStatus": (req) => showStatusDisplay(req.status, req.message),
-        "showSentenceCardEditor": (req) => showSentenceCardEditor(req.selectedWord, req.fullSentence),
         "showActivationPopup": (req) => showActivationPopup(req.isActive)
     };
 
@@ -38,17 +35,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // --- INITIALIZATION ---
 chrome.runtime.sendMessage({ action: "getInitialState" }, (response) => {
     if (chrome.runtime.lastError) {
-        console.error("Could not get initial state:", chrome.runtime.lastError);
+        console.error("Could not get initial state:", chrome.runtime.lastError.message);
     } else if (response) {
         setGlossariState(response.isActive);
     }
 });
 
-
-/**
- * Displays a temporary notification that the extension has been turned on or off.
- * @param {boolean} isActive - The new state of the extension.
- */
 function showActivationPopup(isActive) {
     let existingPopup = document.getElementById('glossari-activation-popup');
     if (existingPopup) existingPopup.remove();
@@ -81,13 +73,8 @@ function createDisplayBox(id, headerContent, bodyContent, footerContent) {
     return displayDiv;
 }
 
-/**
- * Displays an editable box for trimming the sentence for a sentence card.
- * @param {string} selectedWord
- * @param {string} fullSentence
- */
 function showSentenceCardEditor(selectedWord, fullSentence) {
-    const header = `<strong>Trim Sentence Card Front</strong><span class="glossari-label">${selectedWord}</span>`;
+    const header = `<strong>Trim Selection</strong><span class="glossari-label">${selectedWord}</span>`;
     const body = `<div contenteditable="true">${fullSentence}</div>`;
     const footer = `<button id="glossari-cancel-btn">Cancel</button><button id="glossari-confirm-btn">Confirm</button>`;
     const displayDiv = createDisplayBox('glossari-display', header, body, footer);
@@ -98,7 +85,7 @@ function showSentenceCardEditor(selectedWord, fullSentence) {
             chrome.runtime.sendMessage({
                 action: "createSentenceFlashcard",
                 selectedWord: selectedWord,
-                selectedContent: trimmedSentence
+                trimmedSentence: trimmedSentence
             });
         }
         displayDiv.remove();
@@ -106,11 +93,6 @@ function showSentenceCardEditor(selectedWord, fullSentence) {
     displayDiv.querySelector('#glossari-cancel-btn').addEventListener('click', () => displayDiv.remove());
 }
 
-/**
- * Displays an editor for trimming the sentence for a vocab card.
- * @param {string} selectedWord
- * @param {string} fullSentence
- */
 function showVocabCardEditor(selectedWord, fullSentence) {
     const header = `<strong>Trim Vocab Card Sentence</strong><span class="glossari-label">${selectedWord}</span>`;
     const body = `<div contenteditable="true">${fullSentence}</div>`;
@@ -123,7 +105,7 @@ function showVocabCardEditor(selectedWord, fullSentence) {
             chrome.runtime.sendMessage({
                 action: "createVocabFlashcard",
                 selectedWord: selectedWord,
-                sentence: trimmedSentence
+                trimmedSentence: trimmedSentence
             });
         }
         displayDiv.remove();
@@ -131,11 +113,6 @@ function showVocabCardEditor(selectedWord, fullSentence) {
     displayDiv.querySelector('#glossari-cancel-btn').addEventListener('click', () => displayDiv.remove());
 }
 
-/**
- * Displays a status notification box.
- * @param {string} status - 'success' or 'error'.
- * @param {string} message
- */
 function showStatusDisplay(status, message) {
     const header = '<strong>Glossari</strong>';
     const displayDiv = createDisplayBox('glossari-display', header, message, null);
@@ -143,10 +120,6 @@ function showStatusDisplay(status, message) {
     setTimeout(() => displayDiv.remove(), 7000);
 }
 
-/**
- * Shows the main action panel after text is selected.
- * @param {string} selectedWord
- */
 function showSelectionActionPanel(selectedWord) {
     ['glossari-display', 'glossari-activation-popup', 'glossari-selection-panel'].forEach(id => {
         const el = document.getElementById(id);
@@ -173,19 +146,15 @@ function showSelectionActionPanel(selectedWord) {
     panel.querySelector('.glossari-panel-header strong').textContent = selectedWord;
     document.body.appendChild(panel);
 
-    // --- Event Listeners ---
     panel.querySelector('#glossari-create-sentence-btn').addEventListener('click', () => {
         chrome.runtime.sendMessage({ action: "createSentenceFlashcard", selectedWord: selectedWord });
         panel.remove();
     });
 
-    panel.querySelector('#glossari-trim-sentence-btn').addEventListener('click', async () => {
+    panel.querySelector('#glossari-trim-sentence-btn').addEventListener('click', () => {
         panel.remove();
-        // Ask the background script for the sentence, then show trimmer
         chrome.runtime.sendMessage({ action: "getFullSentence", selectedWord: selectedWord }, (fullSentence) => {
-            if (fullSentence) {
-                showSentenceCardEditor(selectedWord, fullSentence);
-            }
+            if (fullSentence) showSentenceCardEditor(selectedWord, fullSentence);
         });
     });
 
@@ -194,58 +163,47 @@ function showSelectionActionPanel(selectedWord) {
         panel.remove();
     });
 
-    panel.querySelector('#glossari-trim-vocab-btn').addEventListener('click', async () => {
+    panel.querySelector('#glossari-trim-vocab-btn').addEventListener('click', () => {
         panel.remove();
-        // Ask the background script for the sentence, then show editor
         chrome.runtime.sendMessage({ action: "getFullSentence", selectedWord: selectedWord }, (fullSentence) => {
-            if (fullSentence) {
-                showVocabCardEditor(selectedWord, fullSentence);
-            }
+            if (fullSentence) showVocabCardEditor(selectedWord, fullSentence);
         });
     });
 
     panel.querySelector('#glossari-panel-close-btn').addEventListener('click', () => panel.remove());
 }
 
-/**
- * Main handler to capture selected text.
- * @param {MouseEvent} event
- */
 async function handleTextSelection(event) {
     const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
 
-    // Ignore if the selection is empty or doesn't exist.
-    if (!selection || selection.isCollapsed) {
-        await chrome.storage.local.remove('selectedWordForAnki');
-        return;
-    }
-
-    // Find the deepest element that contains the entire selection.
     const range = selection.getRangeAt(0);
-    let container = range.commonAncestorContainer;
-    if (container.nodeType !== Node.ELEMENT_NODE) {
-        container = container.parentNode;
-    }
-
-    // *** This is the key change ***
-    // Ignore any selections that originate from within Glossari's own UI.
-    if (container && container.closest('#glossari-display, #glossari-selection-panel')) {
-        return;
-    }
-
-    // Also ignore selections on links, buttons, or editable fields to avoid annoyance.
-    if (event.target.closest('a, button, [contenteditable="true"], input, textarea')) {
-        await chrome.storage.local.remove('selectedWordForAnki');
-        return;
-    }
-
     const selectedText = selection.toString().trim();
 
     if (selectedText.length > 0 && selectedText.length < 1000) {
-        // Store the selected text for keyboard shortcuts to use
-        await chrome.storage.local.set({ selectedWordForAnki: selectedText });
-        showSelectionActionPanel(selectedText);
-    } else {
-        await chrome.storage.local.remove('selectedWordForAnki');
+        // Pass more detailed selection info to background.js
+        showSelectionActionPanel(selectedText, {
+            startContainerPath: getXPath(range.startContainer), // A helper function to get a unique path to the node
+            startOffset: range.startOffset,
+            endContainerPath: getXPath(range.endContainer),
+            endOffset: range.endOffset,
+            // You might also want to send the outerHTML of a common ancestor for more robust context extraction
+            commonAncestorHTML: range.commonAncestorContainer.outerHTML,
+            commonAncestorPath: getXPath(range.commonAncestorContainer)
+        });
     }
+}
+
+
+// Helper function to get an XPath (or similar unique identifier) for a DOM node.
+// This is a complex problem in itself, a simpler approach might be to send
+// the innerText of a common parent node and then find the selected text's
+// start/end index within that text.
+function getXPath(node) {
+    // This is a simplified example; a real XPath generator would be more robust.
+    // For now, let's just return the node's text content and its parent's tag name,
+    // or you might iterate up to find a unique ID.
+    if (node.id) return `//*[@id="${node.id}"]`;
+    if (node.nodeType === Node.TEXT_NODE) return node.parentNode.tagName + ':text';
+    return node.tagName;
 }
