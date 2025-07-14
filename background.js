@@ -37,22 +37,14 @@ async function handleCardCreation(cardCreator, cardData, tabId) {
         const { geminiApiKey, sentenceDeck, vocabDeck, contextSentences = 1 } = await chrome.storage.local.get(['geminiApiKey', 'sentenceDeck', 'vocabDeck', 'contextSentences']);
         if (!geminiApiKey) throw new Error("Gemini API Key is not set. Please set it in the Glossari settings.");
 
-        const { fullSentence, contextualBlock } = await getTextFromPageForSelection(tabId, cardData.selectedWord, contextSentences);
+        // This now correctly passes the selectionDetails from the message
+        const { fullSentence, contextualBlock } = await getTextFromPageForSelection(tabId, cardData.selectedWord, contextSentences, cardData.selectionDetails);
 
-        // --- DEBUGGING LOGS ---
-        console.log("--- Glossari Debug: Data from Page ---");
-        console.log("Selected Word:", cardData.selectedWord);
-        console.log("Full Sentence:", fullSentence);
-        console.log("Contextual Block:", contextualBlock);
-        // --- END DEBUGGING LOGS ---
-
-        // FIX: Pass 'fullSentence' with the correct name.
         const completeCardData = {
             selectedWord: cardData.selectedWord,
             contextualBlock: contextualBlock,
-            fullSentence: fullSentence, // This is the single sentence.
+            fullSentence: fullSentence,
             trimmedSentence: cardData.trimmedSentence,
-            sentence: cardData.sentence,
         };
 
         const deckSetting = cardCreator === createSentenceFlashcard ? sentenceDeck : vocabDeck;
@@ -178,13 +170,15 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 });
 
 
+// Modify the message listener to pass the details along
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const actions = {
         "createSentenceFlashcard": (req) => handleCardCreation(createSentenceFlashcard, req, sender.tab.id),
         "createVocabFlashcard": (req) => handleCardCreation(createVocabFlashcard, req, sender.tab.id),
         "getInitialState": () => chrome.storage.local.get('isGlossariActive').then(sendResponse),
         "getFullSentence": (req) => {
-            getTextFromPageForSelection(sender.tab.id, req.selectedWord, 0)
+            // Pass the new selectionDetails object from the request
+            getTextFromPageForSelection(sender.tab.id, req.selectedWord, 0, req.selectionDetails)
                 .then(result => sendResponse(result.fullSentence));
             return true;
         }
@@ -197,8 +191,80 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return false;
 });
 
+// Update the main function to use the new details
+// In background.js
 
+// In background.js
 
+async function getTextFromPageForSelection(tabId, selectedText, contextSentences = 0, selectionDetails = null) {
+    try {
+        const [tabResult] = await chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            // This function runs on the web page to find the text and its context.
+            func: (selectedText, contextSentences) => {
+                let fullSentence = selectedText;
+                let contextualBlock = selectedText;
+
+                const selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                    return { fullSentence, contextualBlock };
+                }
+
+                // 1. Find the main "anchor" element containing the selection.
+                const BLOCK_TAGS = ['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'ARTICLE', 'SECTION', 'TD', 'PRE'];
+                const range = selection.getRangeAt(0);
+                let anchorElement = range.startContainer.nodeType === 3 ? range.startContainer.parentNode : range.startContainer;
+
+                while (
+                    anchorElement &&
+                    anchorElement.tagName?.toLowerCase() !== 'body' &&
+                    !BLOCK_TAGS.includes(anchorElement.tagName)
+                ) {
+                    anchorElement = anchorElement.parentNode;
+                }
+                
+                // If we didn't find a valid element, exit.
+                if (!anchorElement || !anchorElement.innerText) {
+                    return { fullSentence, contextualBlock };
+                }
+                
+                fullSentence = anchorElement.innerText.trim();
+
+                // 2. Traverse siblings to build the contextual block.
+                const precedingSentences = [];
+                let currentElement = anchorElement.previousElementSibling;
+                for (let i = 0; i < contextSentences && currentElement; i++) {
+                    precedingSentences.unshift(currentElement.innerText.trim());
+                    currentElement = currentElement.previousElementSibling;
+                }
+
+                const subsequentSentences = [];
+                currentElement = anchorElement.nextElementSibling;
+                for (let i = 0; i < contextSentences && currentElement; i++) {
+                    subsequentSentences.push(currentElement.innerText.trim());
+                    currentElement = currentElement.nextElementSibling;
+                }
+
+                // 3. Assemble the final block.
+                contextualBlock = [
+                    ...precedingSentences,
+                    fullSentence,
+                    ...subsequentSentences
+                ].join(' ').trim();
+                
+                return { fullSentence, contextualBlock };
+            },
+            // Pass the contextSentences setting to the function.
+            args: [selectedText, contextSentences]
+        });
+
+        return tabResult?.result || { fullSentence: selectedText, contextualBlock: selectedText };
+
+    } catch (error) {
+        console.error("Could not execute script to get text from page:", error);
+        return { fullSentence: selectedText, contextualBlock: selectedText };
+    }
+}
 
 // =================================================================================
 // SECTION 3: UTILITY & SCRIPTING FUNCTIONS
@@ -232,78 +298,3 @@ function displayResultOnPage(word, label, text, isDarkModeActive) {
     document.getElementById('glossari-close-btn').addEventListener('click', () => glossariDisplay.remove());
 }
 
-async function getTextFromPageForSelection(tabId, selectedText, contextSentences = 0, selectionDetails = null) {
-    try {
-        const [tabResult] = await chrome.scripting.executeScript({
-            target: { tabId: tabId },
-            func: (selectedText, contextSentences, details) => {
-                const selection = window.getSelection();
-                let fullSentence = selectedText;
-                let contextualBlock = selectedText;
-
-                if (details && selection.rangeCount > 0) {
-                    const range = selection.getRangeAt(0);
-
-                    // Reconstruct the full text from the common ancestor, or the whole body
-                    const commonAncestor = range.commonAncestorContainer.nodeType === Node.TEXT_NODE ? range.commonAncestorContainer.parentNode : range.commonAncestorContainer;
-                    const allText = commonAncestor.innerText; // or document.body.innerText if commonAncestor is too small
-
-                    // Find the precise start and end index of the *current selection*
-                    const preSelectionRange = range.cloneRange();
-                    preSelectionRange.selectNodeContents(commonAncestor);
-                    preSelectionRange.setEnd(range.startContainer, range.startOffset);
-                    const startIndex = preSelectionRange.toString().length;
-                    const endIndex = startIndex + selectedText.length;
-
-                    // Now, use these indices to find the correct sentence/context
-                    const sentences = allText.match(/[^.!?]+[.!?]+/g) || [allText];
-                    let targetSentenceIndex = -1;
-                    let charCount = 0;
-
-                    for(let i=0; i<sentences.length; i++) {
-                        if(startIndex >= charCount && startIndex < charCount + sentences[i].length) {
-                            targetSentenceIndex = i;
-                            break;
-                        }
-                        charCount += sentences[i].length;
-                    }
-
-                    if (targetSentenceIndex !== -1) {
-                        fullSentence = sentences[targetSentenceIndex].trim();
-                        const start = Math.max(0, targetSentenceIndex - contextSentences);
-                        const end = Math.min(sentences.length, targetSentenceIndex + contextSentences + 1);
-                        contextualBlock = sentences.slice(start, end).join(' ').trim();
-                    }
-                } else {
-                    // Fallback to original logic if selectionDetails are not provided or invalid
-                    const allText = document.body.innerText;
-                    const selectionIndex = allText.indexOf(selectedText); // This is the problematic part for duplicates
-                    if (selectionIndex !== -1) {
-                         const sentences = allText.match(/[^.!?]+[.!?]+/g) || [allText];
-                        let targetSentenceIndex = -1;
-                        let charCount = 0;
-                        for(let i=0; i<sentences.length; i++) {
-                            if(selectionIndex >= charCount && selectionIndex < charCount + sentences[i].length) {
-                                targetSentenceIndex = i;
-                                break;
-                            }
-                            charCount += sentences[i].length;
-                        }
-                        if (targetSentenceIndex !== -1) {
-                            fullSentence = sentences[targetSentenceIndex].trim();
-                            const start = Math.max(0, targetSentenceIndex - contextSentences);
-                            const end = Math.min(sentences.length, targetSentenceIndex + contextSentences + 1);
-                            contextualBlock = sentences.slice(start, end).join(' ').trim();
-                        }
-                    }
-                }
-                return { fullSentence, contextualBlock };
-            },
-            args: [selectedText, contextSentences, selectionDetails] // Pass the details here
-        });
-        return tabResult?.result || { fullSentence: selectedText, contextualBlock: selectedText };
-    } catch (error) {
-        console.error("Could not execute script to get text from page:", error);
-        return { fullSentence: selectedText, contextualBlock: selectedText };
-    }
-}

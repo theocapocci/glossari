@@ -73,7 +73,7 @@ function createDisplayBox(id, headerContent, bodyContent, footerContent) {
     return displayDiv;
 }
 
-function showSentenceCardEditor(selectedWord, fullSentence) {
+function showSentenceCardEditor(selectedWord, fullSentence, selectionDetails) {
     const header = `<strong>Trim Selection</strong><span class="glossari-label">${selectedWord}</span>`;
     const body = `<div contenteditable="true">${fullSentence}</div>`;
     const footer = `<button id="glossari-cancel-btn">Cancel</button><button id="glossari-confirm-btn">Confirm</button>`;
@@ -85,7 +85,8 @@ function showSentenceCardEditor(selectedWord, fullSentence) {
             chrome.runtime.sendMessage({
                 action: "createSentenceFlashcard",
                 selectedWord: selectedWord,
-                trimmedSentence: trimmedSentence
+                trimmedSentence: trimmedSentence,
+                selectionDetails: selectionDetails // Pass details along
             });
         }
         displayDiv.remove();
@@ -93,7 +94,7 @@ function showSentenceCardEditor(selectedWord, fullSentence) {
     displayDiv.querySelector('#glossari-cancel-btn').addEventListener('click', () => displayDiv.remove());
 }
 
-function showVocabCardEditor(selectedWord, fullSentence) {
+function showVocabCardEditor(selectedWord, fullSentence, selectionDetails) {
     const header = `<strong>Trim Vocab Card Sentence</strong><span class="glossari-label">${selectedWord}</span>`;
     const body = `<div contenteditable="true">${fullSentence}</div>`;
     const footer = `<button id="glossari-cancel-btn">Cancel</button><button id="glossari-confirm-btn">Create Vocab Card</button>`;
@@ -105,13 +106,15 @@ function showVocabCardEditor(selectedWord, fullSentence) {
             chrome.runtime.sendMessage({
                 action: "createVocabFlashcard",
                 selectedWord: selectedWord,
-                trimmedSentence: trimmedSentence
+                trimmedSentence: trimmedSentence,
+                selectionDetails: selectionDetails // Pass details along
             });
         }
         displayDiv.remove();
     });
     displayDiv.querySelector('#glossari-cancel-btn').addEventListener('click', () => displayDiv.remove());
 }
+
 
 function showStatusDisplay(status, message) {
     const header = '<strong>Glossari</strong>';
@@ -120,7 +123,7 @@ function showStatusDisplay(status, message) {
     setTimeout(() => displayDiv.remove(), 7000);
 }
 
-function showSelectionActionPanel(selectedWord) {
+function showSelectionActionPanel(selectedWord, selectionDetails) {
     ['glossari-display', 'glossari-activation-popup', 'glossari-selection-panel'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.remove();
@@ -146,27 +149,48 @@ function showSelectionActionPanel(selectedWord) {
     panel.querySelector('.glossari-panel-header strong').textContent = selectedWord;
     document.body.appendChild(panel);
 
-    panel.querySelector('#glossari-create-sentence-btn').addEventListener('click', () => {
-        chrome.runtime.sendMessage({ action: "createSentenceFlashcard", selectedWord: selectedWord });
-        panel.remove();
-    });
-
-    panel.querySelector('#glossari-trim-sentence-btn').addEventListener('click', () => {
-        panel.remove();
-        chrome.runtime.sendMessage({ action: "getFullSentence", selectedWord: selectedWord }, (fullSentence) => {
-            if (fullSentence) showSentenceCardEditor(selectedWord, fullSentence);
+    const sendMessageAndRemove = (action) => {
+        chrome.runtime.sendMessage({
+            action: action,
+            selectedWord: selectedWord,
+            selectionDetails: selectionDetails,
         });
+        panel.remove();
+    };
+
+    panel.querySelector('#glossari-create-sentence-btn').addEventListener('click', () => {
+        sendMessageAndRemove("createSentenceFlashcard");
     });
 
     panel.querySelector('#glossari-create-vocab-btn').addEventListener('click', () => {
-        chrome.runtime.sendMessage({ action: "createVocabFlashcard", selectedWord: selectedWord });
-        panel.remove();
+        sendMessageAndRemove("createVocabFlashcard");
+    });
+
+    panel.querySelector('#glossari-trim-sentence-btn').addEventListener('click', () => {
+        // For trim, we wait for the callback before removing the panel.
+        chrome.runtime.sendMessage({
+            action: "getFullSentence",
+            selectedWord: selectedWord,
+            selectionDetails: selectionDetails
+        }, (fullSentence) => {
+            panel.remove(); // **FIX:** Remove the panel only AFTER the response is received.
+            if (fullSentence) {
+                showSentenceCardEditor(selectedWord, fullSentence, selectionDetails);
+            }
+        });
     });
 
     panel.querySelector('#glossari-trim-vocab-btn').addEventListener('click', () => {
-        panel.remove();
-        chrome.runtime.sendMessage({ action: "getFullSentence", selectedWord: selectedWord }, (fullSentence) => {
-            if (fullSentence) showVocabCardEditor(selectedWord, fullSentence);
+        // For trim, we wait for the callback before removing the panel.
+        chrome.runtime.sendMessage({
+            action: "getFullSentence",
+            selectedWord: selectedWord,
+            selectionDetails: selectionDetails
+        }, (fullSentence) => {
+            panel.remove(); // **FIX:** Remove the panel only AFTER the response is received.
+            if (fullSentence) {
+                showVocabCardEditor(selectedWord, fullSentence, selectionDetails);
+            }
         });
     });
 
@@ -174,6 +198,11 @@ function showSelectionActionPanel(selectedWord) {
 }
 
 async function handleTextSelection(event) {
+    // Ignore clicks inside any of our UI elements
+    if (event.target.closest('#glossari-display, #glossari-selection-panel')) {
+        return;
+    }
+    
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
 
@@ -181,29 +210,31 @@ async function handleTextSelection(event) {
     const selectedText = selection.toString().trim();
 
     if (selectedText.length > 0 && selectedText.length < 1000) {
-        // Pass more detailed selection info to background.js
         showSelectionActionPanel(selectedText, {
-            startContainerPath: getXPath(range.startContainer), // A helper function to get a unique path to the node
-            startOffset: range.startOffset,
-            endContainerPath: getXPath(range.endContainer),
-            endOffset: range.endOffset,
-            // You might also want to send the outerHTML of a common ancestor for more robust context extraction
-            commonAncestorHTML: range.commonAncestorContainer.outerHTML,
             commonAncestorPath: getXPath(range.commonAncestorContainer)
         });
     }
 }
 
-
-// Helper function to get an XPath (or similar unique identifier) for a DOM node.
-// This is a complex problem in itself, a simpler approach might be to send
-// the innerText of a common parent node and then find the selected text's
-// start/end index within that text.
 function getXPath(node) {
-    // This is a simplified example; a real XPath generator would be more robust.
-    // For now, let's just return the node's text content and its parent's tag name,
-    // or you might iterate up to find a unique ID.
-    if (node.id) return `//*[@id="${node.id}"]`;
-    if (node.nodeType === Node.TEXT_NODE) return node.parentNode.tagName + ':text';
-    return node.tagName;
+    if (node && node.id) return `//*[@id="${node.id}"]`;
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return ''; // Handle text nodes or null nodes
+
+    let path = [];
+    while (node) {
+        let sibling = node;
+        let count = 1;
+        while (sibling.previousElementSibling) {
+            sibling = sibling.previousElementSibling;
+            if (sibling.tagName === node.tagName) {
+                count++;
+            }
+        }
+        const segment = node.tagName.toLowerCase() + (count > 1 ? `[${count}]` : '');
+        path.unshift(segment);
+        // Stop at the body tag
+        if (node.tagName.toLowerCase() === 'body') break;
+        node = node.parentElement;
+    }
+    return '/' + path.join('/');
 }
