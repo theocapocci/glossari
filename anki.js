@@ -65,10 +65,9 @@ async function createFlashcard(options) {
     **Sentence:** "${fullSentence}"
 
     **Instructions:**
-    1.  Provide the most, context-appropriate English translation for the term.
+    1.  Provide the most context-appropriate English translation for the term.
     2.  Your entire response must consist ONLY of the translated text. Do not add any extra words, punctuation, or introductory phrases like "The translation is...".
     3.  Ensure your translation avoids capitalization, unless the term "${selectedWord}" is at the start "${fullSentence}", or otherwise ought to be capitalized.
-    4.  Make use of the surrounding context to ensure the translation is context-appropriate.
 
     **Context:** "${contextualBlock}"  
 
