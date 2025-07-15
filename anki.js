@@ -41,107 +41,107 @@ async function ensureDeckExists(deckName) {
 }
 
 // =================================================================================
-// FLASHCARD CREATION LOGIC
+// GENERIC FLASHCARD CREATION LOGIC
 // =================================================================================
 
-// FIX: Changed function signature to expect 'fullSentence' instead of 'cardFrontSentence'.
-export async function createSentenceFlashcard({ selectedWord, contextualBlock, trimmedSentence, fullSentence }, geminiApiKey, sentenceDeck) {
+async function createFlashcard(options) {
+    const { cardType, cardData, geminiApiKey, deckName } = options;
+    const { selectedWord, contextualBlock, trimmedSentence, fullSentence } = cardData;
 
-        // --- DEBUGGING LOGS ---
-    console.log("--- Glossari Debug: Data received by createSentenceFlashcard ---");
-    console.log({ selectedWord, contextualBlock, trimmedSentence, fullSentence });
-    // --- END DEBUGGING LOGS ---
+    await ensureDeckExists(deckName);
 
-
-    const targetDeck = sentenceDeck || 'Glossari Sentences';
-    await ensureDeckExists(targetDeck);
-    
-    // The sentence for the card is the user-trimmed one, or the original full sentence as a fallback.
-    const sentenceForCard = trimmedSentence || fullSentence;
-
-    // This check prevents the "empty note" error.
-    if (!sentenceForCard || !selectedWord) {
+    if (!selectedWord || !(trimmedSentence || fullSentence)) {
         throw new Error("Cannot create flashcard because the word or sentence is empty.");
     }
 
-    const aiPrompt = `
-    You are an automated translation service for a flashcard application. Your task is to provide a concise English translation of a given French term based on its use in the sentence it belongs to.
+    let modelName, fields, tags;
 
-    **French Term:** "${selectedWord}"
-    **Sentence:** "${fullSentence}"
-    **Context:** "${contextualBlock}"
+    if (cardType === 'sentence') {
+        const sentenceForCard = trimmedSentence || fullSentence;
+        const aiPrompt = `
+        You are an automated translation service for a flashcard application. Your task is to provide a concise English translation of a given French term based on its use in the sentence it belongs to.
 
-    **Instructions:**
-    1.  Provide the most context-appropriate English translation for the term.
-    2.  Your entire response must consist ONLY of the translated text. Do not add any extra words, punctuation, or introductory phrases like "The translation is...".
-    3.  Ensure your translation avoids capitalization, unless the term "${selectedWord}" is at the start "${fullSentence}", or otherwise ought to be capitalized.
+        **French Term:** "${selectedWord}"
+        **Sentence:** "${fullSentence}"
+        **Context:** "${contextualBlock}"
 
-    **Examples:**
-    - French Term: 'maison', Sentence: 'La maison est grande'
-    - Output: house
+        **Instructions:**
+        1.  Provide the most context-appropriate English translation for the term.
+        2.  Your entire response must consist ONLY of the translated text. Do not add any extra words, punctuation, or introductory phrases like "The translation is...".
+        3.  Ensure your translation avoids capitalization, unless the term "${selectedWord}" is at the start "${fullSentence}", or otherwise ought to be capitalized.`;
 
-    - French Term: 'Si vous avez', Sentence: 'Si vous avez un vélo, vous serez heureux'
-    - Output: If you have
+        const translation = await callGeminiAPI(aiPrompt, geminiApiKey);
 
-    - French Term: 'France', Sentence: 'J'habite en France'
-    - Output: France
-    `;
+        modelName = "i+1";
+        fields = {
+            "sentence": sentenceForCard,
+            "target word": selectedWord,
+            "translation": translation
+        };
+        tags = ["français"];
 
-    // --- DEBUGGING LOGS ---
-    console.log("--- Glossari Debug: Gemini Prompt for Sentence Card ---");
-    console.log(aiPrompt);
-    // --- END DEBUGGING LOGS ---
+    } else if (cardType === 'vocab') {
+        const contextualPrompt = `Analyze the French word "${selectedWord}" in the context of the following text: "${contextualBlock}". Provide a concise English definition for the word as it's used in that specific context. Return only the definition of "${selectedWord}", with no introductory phrases.`;
+        let contextualMeaning = await callGeminiAPI(contextualPrompt, geminiApiKey);
+        contextualMeaning = contextualMeaning.replace(/\.$/, "");
 
-    const translation = await callGeminiAPI(aiPrompt, geminiApiKey);
+        const myMemoryUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(selectedWord)}&langpair=fr|en`;
+        const myMemoryResponse = await fetch(myMemoryUrl);
+        const myMemoryData = await myMemoryResponse.json();
 
-    const ankiFields = {
-        "sentence": sentenceForCard,
-        "target word": selectedWord,
-        "translation": translation
-    };
+        let otherMeanings = [];
+        if (myMemoryData.responseStatus === 200 && myMemoryData.matches) {
+            const uniqueTranslations = new Set();
+            myMemoryData.matches.forEach(match => {
+                const translation = match.translation.toLowerCase();
+                if (translation !== contextualMeaning.toLowerCase() && translation !== selectedWord.toLowerCase()) {
+                    uniqueTranslations.add(match.translation);
+                }
+            });
+            otherMeanings = Array.from(uniqueTranslations).slice(0, 3);
+        }
 
-    await addAnkiNote(targetDeck, "i+1", ankiFields, ["français"]);
-    return { deck: targetDeck, word: selectedWord };
+        const ankiFront = selectedWord;
+        const sentenceForBack = trimmedSentence || fullSentence;
+        const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`\\b(${escapeRegExp(selectedWord)})\\b`, 'gi');
+        const formattedSentence = sentenceForBack.replace(regex, '<b>$1</b>');
+
+        let ankiBack = `<div><em>${formattedSentence}</em></div><hr><div><b>${selectedWord}</b> = ${contextualMeaning}</div>`;
+        if (otherMeanings.length > 0) {
+            ankiBack += `<br><div><b>Other Meanings:</b></div><ul>${otherMeanings.map(m => `<li>${m}</li>`).join('')}</ul>`;
+        }
+        
+        modelName = "Basic";
+        fields = { "Front": ankiFront, "Back": ankiBack };
+        tags = ["français", "vocab-card"];
+
+    } else {
+        throw new Error(`Invalid card type: ${cardType}`);
+    }
+
+    await addAnkiNote(deckName, modelName, fields, tags);
+    return { deck: deckName, word: selectedWord };
 }
 
-// FIX: Changed function signature to expect 'fullSentence' instead of 'cardFrontSentence'.
-export async function createVocabFlashcard({ selectedWord, contextualBlock, trimmedSentence, fullSentence }, geminiApiKey, vocabDeck) {
-    const targetDeck = vocabDeck || 'Glossari Vocab';
-    await ensureDeckExists(targetDeck);
+// =================================================================================
+// EXPORTED FLASHCARD CREATION FUNCTIONS
+// =================================================================================
 
-    const contextualPrompt = `Analyze the French word "${selectedWord}" in the context of the following text: "${contextualBlock}". Provide a concise English definition for the word as it's used in that specific context. Return only the definition of "${selectedWord}", with no introductory phrases.`;
-    let contextualMeaning = await callGeminiAPI(contextualPrompt, geminiApiKey);
-    contextualMeaning = contextualMeaning.replace(/\.$/, "");
+export async function createSentenceFlashcard(cardData, geminiApiKey, sentenceDeck) {
+    return createFlashcard({
+        cardType: 'sentence',
+        cardData,
+        geminiApiKey,
+        deckName: sentenceDeck || 'Glossari Sentences'
+    });
+}
 
-    const myMemoryUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(selectedWord)}&langpair=fr|en`;
-    const myMemoryResponse = await fetch(myMemoryUrl);
-    const myMemoryData = await myMemoryResponse.json();
-
-    let otherMeanings = [];
-    if (myMemoryData.responseStatus === 200 && myMemoryData.matches) {
-        const uniqueTranslations = new Set();
-        myMemoryData.matches.forEach(match => {
-            const translation = match.translation.toLowerCase();
-            if (translation !== contextualMeaning.toLowerCase() && translation !== selectedWord.toLowerCase()) {
-                uniqueTranslations.add(match.translation);
-            }
-        });
-        otherMeanings = Array.from(uniqueTranslations).slice(0, 3);
-    }
-
-    const ankiFront = selectedWord;
-    
-    // The sentence for the card back is the user-trimmed one ('sentence'), or the full sentence as a fallback.
-    const sentenceForBack = sentence || fullSentence;
-    const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\b(${escapeRegExp(selectedWord)})\\b`, 'gi');
-    const formattedSentence = sentenceForBack.replace(regex, '<b>$1</b>');
-
-    let ankiBack = `<div><em>${formattedSentence}</em></div><hr><div><b>${selectedWord}</b> = ${contextualMeaning}</div>`;
-    if (otherMeanings.length > 0) {
-        ankiBack += `<br><div><b>Other Meanings:</b></div><ul>${otherMeanings.map(m => `<li>${m}</li>`).join('')}</ul>`;
-    }
-
-    await addAnkiNote(targetDeck, "Basic", { "Front": ankiFront, "Back": ankiBack }, ["français", "vocab-card"]);
-    return { deck: targetDeck, word: selectedWord };
+export async function createVocabFlashcard(cardData, geminiApiKey, vocabDeck) {
+    return createFlashcard({
+        cardType: 'vocab',
+        cardData,
+        geminiApiKey,
+        deckName: vocabDeck || 'Glossari Vocab'
+    });
 }

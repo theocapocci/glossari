@@ -32,12 +32,21 @@ chrome.runtime.onInstalled.addListener(() => {
 // SECTION 1: CORE ACTION HANDLERS
 // =================================================================================
 
+// REFACTORED: Generic function to display results on the page
+async function showResultInPage(tabId, word, label, text) {
+    const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
+    chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        function: displayResultOnPage, // This function is defined in SECTION 3
+        args: [word, label, text, isDarkMode]
+    });
+}
+
 async function handleCardCreation(cardCreator, cardData, tabId) {
     try {
         const { geminiApiKey, sentenceDeck, vocabDeck, contextSentences = 1 } = await chrome.storage.local.get(['geminiApiKey', 'sentenceDeck', 'vocabDeck', 'contextSentences']);
         if (!geminiApiKey) throw new Error("Gemini API Key is not set. Please set it in the Glossari settings.");
 
-        // This now correctly passes the selectionDetails from the message
         const { fullSentence, contextualBlock } = await getTextFromPageForSelection(tabId, cardData.selectedWord, contextSentences, cardData.selectionDetails);
 
         const completeCardData = {
@@ -68,12 +77,7 @@ async function handleDefineMyMemory(selectedText, tabId) {
         if (!definition || definition.toLowerCase() === selectedText.toLowerCase()) {
             throw new Error(`No distinct definition found for "${selectedText}".`);
         }
-        const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
-        chrome.scripting.executeScript({
-            target: { tabId: tabId },
-            function: displayResultOnPage,
-            args: [selectedText, 'MyMemory', definition, isDarkMode]
-        });
+        await showResultInPage(tabId, selectedText, 'MyMemory', definition); // Use helper
     } catch (error) {
         console.error("Glossari Definition Error (MyMemory):", error.message);
         await sendStatusMessage('error', `Definition Failed: ${error.message}`);
@@ -87,17 +91,13 @@ async function handleTranslateGemini(selectedText, sentenceToTranslate, tabId) {
         const translationPrompt = `Translate the following French sentence into English: "${sentenceToTranslate}". Provide only the translated sentence.`;
         let translatedSentence = await callGeminiAPI(translationPrompt, geminiApiKey);
         translatedSentence = convertMarkdownBoldToHtml(translatedSentence);
-        const { isDarkMode } = await chrome.storage.local.get('isDarkMode');
-        chrome.scripting.executeScript({
-            target: { tabId: tabId },
-            function: displayResultOnPage,
-            args: [selectedText, "Translation", translatedSentence, isDarkMode]
-        });
+        await showResultInPage(tabId, selectedText, "Translation", translatedSentence); // Use helper
     } catch (error) {
         console.error("Glossari Sentence Translation Error:", error.message);
         await sendStatusMessage('error', `Translation Failed: ${error.message}`);
     }
 }
+
 
 // =================================================================================
 // SECTION 2: LISTENERS (EVENTS)
@@ -136,10 +136,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 chrome.commands.onCommand.addListener(async (command, tab) => {
-    // Make sure this command name matches the one in your manifest.json
     if (command === "translate-sentence") {
         try {
-            // We need to get the selected text from the page
             const [injectionResult] = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 func: () => window.getSelection().toString(),
@@ -151,12 +149,9 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
                 await sendStatusMessage('error', 'Please select text to translate.');
                 return;
             }
-
-            // Use the existing function to get the full sentence
             const { fullSentence } = await getTextFromPageForSelection(tab.id, selectedText, 0);
             
             if (fullSentence) {
-                // Call the existing translation handler
                 await handleTranslateGemini(selectedText, fullSentence, tab.id);
             } else {
                  await sendStatusMessage('error', 'Could not find sentence for selection.');
@@ -169,15 +164,12 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
     }
 });
 
-
-// Modify the message listener to pass the details along
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const actions = {
         "createSentenceFlashcard": (req) => handleCardCreation(createSentenceFlashcard, req, sender.tab.id),
         "createVocabFlashcard": (req) => handleCardCreation(createVocabFlashcard, req, sender.tab.id),
         "getInitialState": () => chrome.storage.local.get('isGlossariActive').then(sendResponse),
         "getFullSentence": (req) => {
-            // Pass the new selectionDetails object from the request
             getTextFromPageForSelection(sender.tab.id, req.selectedWord, 0, req.selectionDetails)
                 .then(result => sendResponse(result.fullSentence));
             return true;
@@ -191,16 +183,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return false;
 });
 
-// Update the main function to use the new details
-// In background.js
-
-// In background.js
+// =================================================================================
+// SECTION 3: UTILITY & SCRIPTING FUNCTIONS
+// =================================================================================
 
 async function getTextFromPageForSelection(tabId, selectedText, contextSentences = 0, selectionDetails = null) {
     try {
         const [tabResult] = await chrome.scripting.executeScript({
             target: { tabId: tabId },
-            // This function runs on the web page to find the text and its context.
             func: (selectedText, contextSentences) => {
                 let fullSentence = selectedText;
                 let contextualBlock = selectedText;
@@ -209,8 +199,6 @@ async function getTextFromPageForSelection(tabId, selectedText, contextSentences
                 if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
                     return { fullSentence, contextualBlock };
                 }
-
-                // 1. Find the main "anchor" element containing the selection.
                 const BLOCK_TAGS = ['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'ARTICLE', 'SECTION', 'TD', 'PRE'];
                 const range = selection.getRangeAt(0);
                 let anchorElement = range.startContainer.nodeType === 3 ? range.startContainer.parentNode : range.startContainer;
@@ -223,14 +211,12 @@ async function getTextFromPageForSelection(tabId, selectedText, contextSentences
                     anchorElement = anchorElement.parentNode;
                 }
                 
-                // If we didn't find a valid element, exit.
                 if (!anchorElement || !anchorElement.innerText) {
                     return { fullSentence, contextualBlock };
                 }
                 
                 fullSentence = anchorElement.innerText.trim();
 
-                // 2. Traverse siblings to build the contextual block.
                 const precedingSentences = [];
                 let currentElement = anchorElement.previousElementSibling;
                 for (let i = 0; i < contextSentences && currentElement; i++) {
@@ -245,7 +231,6 @@ async function getTextFromPageForSelection(tabId, selectedText, contextSentences
                     currentElement = currentElement.nextElementSibling;
                 }
 
-                // 3. Assemble the final block.
                 contextualBlock = [
                     ...precedingSentences,
                     fullSentence,
@@ -254,7 +239,6 @@ async function getTextFromPageForSelection(tabId, selectedText, contextSentences
                 
                 return { fullSentence, contextualBlock };
             },
-            // Pass the contextSentences setting to the function.
             args: [selectedText, contextSentences]
         });
 
@@ -265,10 +249,6 @@ async function getTextFromPageForSelection(tabId, selectedText, contextSentences
         return { fullSentence: selectedText, contextualBlock: selectedText };
     }
 }
-
-// =================================================================================
-// SECTION 3: UTILITY & SCRIPTING FUNCTIONS
-// =================================================================================
 
 async function sendStatusMessage(status, message) {
     try {
@@ -297,4 +277,3 @@ function displayResultOnPage(word, label, text, isDarkModeActive) {
     document.body.appendChild(glossariDisplay);
     document.getElementById('glossari-close-btn').addEventListener('click', () => glossariDisplay.remove());
 }
-

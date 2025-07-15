@@ -73,48 +73,32 @@ function createDisplayBox(id, headerContent, bodyContent, footerContent) {
     return displayDiv;
 }
 
-function showSentenceCardEditor(selectedWord, fullSentence, selectionDetails) {
-    const header = `<strong>Trim Selection</strong><span class="glossari-label">${selectedWord}</span>`;
+// REFACTORED: Generic function to show a card editor
+function showCardEditor(cardType, selectedWord, fullSentence, selectionDetails) {
+    const isVocab = cardType === 'vocab';
+    const title = isVocab ? 'Trim Vocab Card Sentence' : 'Trim Selection';
+    const buttonText = isVocab ? 'Create Vocab Card' : 'Confirm';
+    const action = isVocab ? 'createVocabFlashcard' : 'createSentenceFlashcard';
+
+    const header = `<strong>${title}</strong><span class="glossari-label">${selectedWord}</span>`;
     const body = `<div contenteditable="true">${fullSentence}</div>`;
-    const footer = `<button id="glossari-cancel-btn">Cancel</button><button id="glossari-confirm-btn">Confirm</button>`;
+    const footer = `<button id="glossari-cancel-btn">Cancel</button><button id="glossari-confirm-btn">${buttonText}</button>`;
     const displayDiv = createDisplayBox('glossari-display', header, body, footer);
 
     displayDiv.querySelector('#glossari-confirm-btn').addEventListener('click', () => {
         const trimmedSentence = displayDiv.querySelector('.glossari-body').innerText.trim();
         if (trimmedSentence) {
             chrome.runtime.sendMessage({
-                action: "createSentenceFlashcard",
+                action: action,
                 selectedWord: selectedWord,
                 trimmedSentence: trimmedSentence,
-                selectionDetails: selectionDetails // Pass details along
+                selectionDetails: selectionDetails
             });
         }
         displayDiv.remove();
     });
     displayDiv.querySelector('#glossari-cancel-btn').addEventListener('click', () => displayDiv.remove());
 }
-
-function showVocabCardEditor(selectedWord, fullSentence, selectionDetails) {
-    const header = `<strong>Trim Vocab Card Sentence</strong><span class="glossari-label">${selectedWord}</span>`;
-    const body = `<div contenteditable="true">${fullSentence}</div>`;
-    const footer = `<button id="glossari-cancel-btn">Cancel</button><button id="glossari-confirm-btn">Create Vocab Card</button>`;
-    const displayDiv = createDisplayBox('glossari-display', header, body, footer);
-
-    displayDiv.querySelector('#glossari-confirm-btn').addEventListener('click', () => {
-        const trimmedSentence = displayDiv.querySelector('.glossari-body').innerText.trim();
-        if (trimmedSentence) {
-            chrome.runtime.sendMessage({
-                action: "createVocabFlashcard",
-                selectedWord: selectedWord,
-                trimmedSentence: trimmedSentence,
-                selectionDetails: selectionDetails // Pass details along
-            });
-        }
-        displayDiv.remove();
-    });
-    displayDiv.querySelector('#glossari-cancel-btn').addEventListener('click', () => displayDiv.remove());
-}
-
 
 function showStatusDisplay(status, message) {
     const header = '<strong>Glossari</strong>';
@@ -157,48 +141,31 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
         });
         panel.remove();
     };
-
-    panel.querySelector('#glossari-create-sentence-btn').addEventListener('click', () => {
-        sendMessageAndRemove("createSentenceFlashcard");
-    });
-
-    panel.querySelector('#glossari-create-vocab-btn').addEventListener('click', () => {
-        sendMessageAndRemove("createVocabFlashcard");
-    });
-
-    panel.querySelector('#glossari-trim-sentence-btn').addEventListener('click', () => {
-        // For trim, we wait for the callback before removing the panel.
+    
+    // REFACTORED: Helper for trim buttons
+    const handleTrimClick = (cardType) => {
         chrome.runtime.sendMessage({
             action: "getFullSentence",
             selectedWord: selectedWord,
             selectionDetails: selectionDetails
         }, (fullSentence) => {
-            panel.remove(); // **FIX:** Remove the panel only AFTER the response is received.
+            panel.remove();
             if (fullSentence) {
-                showSentenceCardEditor(selectedWord, fullSentence, selectionDetails);
+                showCardEditor(cardType, selectedWord, fullSentence, selectionDetails);
             }
         });
-    });
+    };
 
-    panel.querySelector('#glossari-trim-vocab-btn').addEventListener('click', () => {
-        // For trim, we wait for the callback before removing the panel.
-        chrome.runtime.sendMessage({
-            action: "getFullSentence",
-            selectedWord: selectedWord,
-            selectionDetails: selectionDetails
-        }, (fullSentence) => {
-            panel.remove(); // **FIX:** Remove the panel only AFTER the response is received.
-            if (fullSentence) {
-                showVocabCardEditor(selectedWord, fullSentence, selectionDetails);
-            }
-        });
-    });
+    panel.querySelector('#glossari-create-sentence-btn').addEventListener('click', () => sendMessageAndRemove("createSentenceFlashcard"));
+    panel.querySelector('#glossari-create-vocab-btn').addEventListener('click', () => sendMessageAndRemove("createVocabFlashcard"));
+    
+    panel.querySelector('#glossari-trim-sentence-btn').addEventListener('click', () => handleTrimClick('sentence'));
+    panel.querySelector('#glossari-trim-vocab-btn').addEventListener('click', () => handleTrimClick('vocab'));
 
     panel.querySelector('#glossari-panel-close-btn').addEventListener('click', () => panel.remove());
 }
 
 async function handleTextSelection(event) {
-    // Ignore clicks inside any of our UI elements
     if (event.target.closest('#glossari-display, #glossari-selection-panel')) {
         return;
     }
@@ -218,7 +185,7 @@ async function handleTextSelection(event) {
 
 function getXPath(node) {
     if (node && node.id) return `//*[@id="${node.id}"]`;
-    if (!node || node.nodeType !== Node.ELEMENT_NODE) return ''; // Handle text nodes or null nodes
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return '';
 
     let path = [];
     while (node) {
@@ -232,7 +199,6 @@ function getXPath(node) {
         }
         const segment = node.tagName.toLowerCase() + (count > 1 ? `[${count}]` : '');
         path.unshift(segment);
-        // Stop at the body tag
         if (node.tagName.toLowerCase() === 'body') break;
         node = node.parentElement;
     }
