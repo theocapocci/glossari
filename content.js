@@ -200,6 +200,7 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
 
 
 async function handleTextSelection(event) {
+    if (!isGlossariActive) return;
     if (event.target.closest('#glossari-display, #glossari-selection-panel')) {
         return;
     }
