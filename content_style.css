@@ -192,8 +192,8 @@ body.dark-mode #glossari-confirm-btn {
     right: 20px;
     width: auto;
     background-color: var(--glossari-bg-color);
-    border-radius: 8px;
-    box-shadow: 0 4px 12px var(--glossari-shadow-color);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px var(--glossari-shadow-color);
     z-index: 100000;
     font-family: 'Inter', sans-serif;
     font-size: 14px;
@@ -205,7 +205,7 @@ body.dark-mode #glossari-confirm-btn {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 12px;
+    padding: 12px 16px;
     background-color: var(--glossari-header-bg-color);
     border-bottom: 1px solid var(--glossari-border-color);
     max-width: 320px;
@@ -215,7 +215,10 @@ body.dark-mode #glossari-confirm-btn {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.glossari-panel-header strong { font-weight: 600; }
+.glossari-panel-header strong {
+    font-weight: 700;
+    font-size: 1.1em;
+}
 #glossari-panel-close-btn {
     background: none;
     border: none;
@@ -225,37 +228,71 @@ body.dark-mode #glossari-confirm-btn {
     margin-left: 8px;
 }
 #glossari-panel-close-btn:hover { color: var(--glossari-close-btn-hover-color); }
-.glossari-panel-body { padding: 12px; }
-.glossari-button-group { display: flex; }
+
+.glossari-panel-body {
+    padding: 16px;
+}
+
+.glossari-button-group {
+    display: flex;
+    /* MODIFIED: Reduced margin-top for less space above the button group */
+    margin-top: 0.2px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+}
+
 .glossari-button-group button {
-    border: 1px solid #6366f1;
+    border: none;
     background-color: #6366f1;
     color: #fff;
-    padding: 6px 10px;
+    padding: 8px 12px;
     cursor: pointer;
     font-weight: 600;
     transition: background-color 0.2s ease-in-out;
-    font-size: 12px;
+    font-size: 13px;
     white-space: nowrap;
+    line-height: 1;
 }
-.glossari-button-group button:hover { background-color: #4f46e5; }
-
-/* Style the main buttons */
-#glossari-create-sentence-btn, #glossari-create-vocab-btn {
-    border-top-left-radius: 5px;
-    border-bottom-left-radius: 5px;
-    flex-grow: 1; /* MODIFIED: Make the main button take up available space */
-    text-align: center; /* MODIFIED: Center the text inside the button */
+body.dark-mode .glossari-button-group button {
+    background-color: #4c51bf;
 }
-
-/* Style the connected icon buttons */
-#glossari-trim-sentence-btn, #glossari-trim-vocab-btn {
-    border-top-right-radius: 5px;
-    border-bottom-right-radius: 5px;
-    border-left: 1px solid #4f46e5; /* A slightly darker border to separate */
-    font-size: 14px;
-    padding: 6px 10px;
-    flex-grow: 0; /* MODIFIED: Ensure trim button does not grow */
-    flex-shrink: 0; /* MODIFIED: Ensure trim button does not shrink */
+.glossari-button-group button:hover {
+    background-color: #4f46e5;
+}
+body.dark-mode .glossari-button-group button:hover {
+    background-color: #363b90;
 }
 
+#glossari-create-card-btn {
+    flex-grow: 1;
+    text-align: center;
+}
+
+#glossari-trim-card-btn {
+    border-left: 1px solid rgba(255, 255, 255, 0.3);
+    font-size: 16px;
+    width: 38px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 8px 0;
+}
+body.dark-mode #glossari-trim-card-btn {
+    border-left-color: rgba(0, 0, 0, 0.3);
+}
+
+.mymemory-definition {
+    /* MODIFIED: Reduced margin-top and padding-top for less space below button group and above definition text */
+    margin-top: 8px;
+    border-top: 1px solid var(--glossari-border-color);
+    padding-top: 8px;
+    font-size: 0.95em;
+    line-height: 1.5;
+    color: var(--glossari-label-color);
+}
+.mymemory-definition span {
+    font-style: italic;
+    opacity: 0.7;
+}

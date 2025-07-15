@@ -91,11 +91,10 @@ function createDisplayBox(id, headerContent, bodyContent, footerContent) {
     return displayDiv;
 }
 
-function showCardEditor(cardType, selectedWord, fullSentence, selectionDetails) {
-    const isVocab = cardType === 'vocab';
-    const title = isVocab ? 'Trim Vocab Card Sentence' : 'Trim Selection';
-    const buttonText = isVocab ? 'Create Vocab Card' : 'Confirm';
-    const action = isVocab ? 'createVocabFlashcard' : 'createSentenceFlashcard';
+function showCardEditor(selectedWord, fullSentence, selectionDetails) {
+    const title = 'Trim Sentence for Flashcard';
+    const buttonText = 'Create Flashcard';
+    const action = 'createFlashcard'; // Unified action
 
     const header = `<strong>${title}</strong><span class="glossari-label">${selectedWord}</span>`;
     const body = `<div contenteditable="true">${fullSentence}</div>`;
@@ -124,13 +123,12 @@ function showStatusDisplay(status, message) {
     setTimeout(() => displayDiv.remove(), 7000);
 }
 
-function createButtonGroupHTML(type, label) {
-    // Capitalize the first letter of the type for the ID
-    const capitalizedType = type.charAt(0).toUpperCase() + type.slice(1);
+// MODIFIED: Simplified to a single button group
+function createButtonGroupHTML() {
     return `
-        <div class="glossari-button-group" style="margin-top: 8px;">
-            <button id="glossari-create-${type}-btn">Create ${label} Card</button>
-            <button id="glossari-trim-${type}-btn" title="Trim sentence before creating">✂️</button>
+        <div class="glossari-button-group";">
+            <button id="glossari-create-card-btn">Create Flashcard</button>
+            <button id="glossari-trim-card-btn" title="Trim sentence before creating">✂️</button>
         </div>
     `;
 }
@@ -151,9 +149,8 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
             <button id="glossari-panel-close-btn" title="Close">&times;</button>
         </div>
         <div class="glossari-panel-body">
-            ${createButtonGroupHTML('sentence', 'Sentence')}
-            ${createButtonGroupHTML('vocab', 'Vocab')}
-            <div class="mymemory-definition" style="margin-top: 8px; border-top: 1px solid var(--glossari-border-color); padding-top: 8px;">
+            ${createButtonGroupHTML()}
+            <div class="mymemory-definition">
                 <span style="opacity: 0.6;">loading...</span>
             </div>
         </div>`;
@@ -175,7 +172,7 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
         panel.remove();
     };
 
-    const handleTrimClick = (cardType) => {
+    const handleTrimClick = () => { // Simplified handler
         chrome.runtime.sendMessage({
             action: "getFullSentence",
             selectedWord: selectedWord,
@@ -183,16 +180,14 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
         }, (fullSentence) => {
             panel.remove();
             if (fullSentence) {
-                showCardEditor(cardType, selectedWord, fullSentence, selectionDetails);
+                showCardEditor(selectedWord, fullSentence, selectionDetails); // No cardType needed
             }
         });
     };
 
-    panel.querySelector('#glossari-create-sentence-btn').addEventListener('click', () => sendMessageAndRemove("createSentenceFlashcard"));
-    panel.querySelector('#glossari-create-vocab-btn').addEventListener('click', () => sendMessageAndRemove("createVocabFlashcard"));
-
-    panel.querySelector('#glossari-trim-sentence-btn').addEventListener('click', () => handleTrimClick('sentence'));
-    panel.querySelector('#glossari-trim-vocab-btn').addEventListener('click', () => handleTrimClick('vocab'));
+    // Event listeners for the unified button
+    panel.querySelector('#glossari-create-card-btn').addEventListener('click', () => sendMessageAndRemove("createFlashcard"));
+    panel.querySelector('#glossari-trim-card-btn').addEventListener('click', handleTrimClick);
 
     panel.querySelector('#glossari-panel-close-btn').addEventListener('click', () => panel.remove());
 }
@@ -203,7 +198,7 @@ async function handleTextSelection(event) {
     if (event.target.closest('#glossari-display, #glossari-selection-panel')) {
         return;
     }
-    
+
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
 

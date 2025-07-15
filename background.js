@@ -1,7 +1,7 @@
 // background.js
 
 import { convertMarkdownBoldToHtml, callGeminiAPI } from './utils.js';
-import { createSentenceFlashcard, createVocabFlashcard } from './anki.js';
+import { createFlashcard } from './anki.js'; // Import the unified function
 
 console.log("Glossari background service worker loaded!");
 
@@ -48,9 +48,9 @@ async function showResultInPage(tabId, word, label, text) {
     });
 }
 
-async function handleCardCreation(cardCreator, cardData, tabId) {
+async function handleCardCreation(cardData, tabId) {
     try {
-        const { geminiApiKey, sentenceDeck, vocabDeck, contextSentences = 1 } = await chrome.storage.local.get(['geminiApiKey', 'sentenceDeck', 'vocabDeck', 'contextSentences']);
+        const { geminiApiKey, ankiDeck, contextSentences = 1 } = await chrome.storage.local.get(['geminiApiKey', 'ankiDeck', 'contextSentences']);
         if (!geminiApiKey) throw new Error("Gemini API Key is not set. Please set it in the Glossari settings.");
 
         const { fullSentence, contextualBlock } = await getTextFromPageForSelection(tabId, cardData.selectedWord, contextSentences, cardData.selectionDetails);
@@ -63,7 +63,7 @@ async function handleCardCreation(cardCreator, cardData, tabId) {
         } else {
             console.log("Cache stale or empty. Fetching new translation for:", cardData.selectedWord);
             const aiPrompt = `
-            You are an automated translation service for a flashcard application. Your task is to provide a concise English translation of a given French term based on its use in a sentence. 
+            You are an automated translation service for a flashcard application. Your task is to provide a concise English translation of a given French term based on its use in a sentence.
 
             **French Term:** "${cardData.selectedWord}"
             **Sentence:** "${fullSentence}"
@@ -73,7 +73,7 @@ async function handleCardCreation(cardCreator, cardData, tabId) {
             2.  Your entire response must consist ONLY of the translated text. Do not add any extra words, punctuation, or introductory phrases like "The translation is...".
             3.  Ensure your translation avoids capitalization, unless the term "${cardData.selectedWord}" is at the start "${fullSentence}", or otherwise ought to be capitalized.
 
-            **Context:** "${contextualBlock}"  
+            **Context:** "${contextualBlock}"
 
             **Examples:**
             - French Term: 'maison', Sentence: 'La maison est grande!'
@@ -101,9 +101,8 @@ async function handleCardCreation(cardCreator, cardData, tabId) {
             translation // Add the translation here
         };
 
-        const deckSetting = cardCreator === createSentenceFlashcard ? sentenceDeck : vocabDeck;
-        // The API key is no longer passed to the creator functions
-        const result = await cardCreator(completeCardData, deckSetting);
+        // Call the unified createFlashcard function
+        const result = await createFlashcard(completeCardData, ankiDeck);
 
         await sendStatusMessage('success', `Card for "<strong>${result.word}</strong>" created in deck "<strong>${result.deck}</strong>"!`);
     } catch (error) {
@@ -206,13 +205,13 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
             });
 
             const selectedText = injectionResult.result ? injectionResult.result.trim() : "";
-            
+
             if (!selectedText) {
                 await sendStatusMessage('error', 'Please select text to translate.');
                 return;
             }
             const { fullSentence } = await getTextFromPageForSelection(tab.id, selectedText, 0);
-            
+
             if (fullSentence) {
                 await handleTranslateGemini(selectedText, fullSentence, tab.id);
             } else {
@@ -228,8 +227,7 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const actions = {
-        "createSentenceFlashcard": (req) => handleCardCreation(createSentenceFlashcard, req, sender.tab.id),
-        "createVocabFlashcard": (req) => handleCardCreation(createVocabFlashcard, req, sender.tab.id),
+        "createFlashcard": (req) => handleCardCreation(req, sender.tab.id), // Unified action
         "getInitialState": () => chrome.storage.local.get('isGlossariActive').then(sendResponse),
         "getFullSentence": (req) => {
             getTextFromPageForSelection(sender.tab.id, req.selectedWord, 0, req.selectionDetails)
@@ -276,11 +274,11 @@ async function getTextFromPageForSelection(tabId, selectedText, contextSentences
                 ) {
                     anchorElement = anchorElement.parentNode;
                 }
-                
+
                 if (!anchorElement || !anchorElement.innerText) {
                     return { fullSentence, contextualBlock };
                 }
-                
+
                 fullSentence = anchorElement.innerText.trim();
 
                 const precedingSentences = [];
@@ -302,7 +300,7 @@ async function getTextFromPageForSelection(tabId, selectedText, contextSentences
                     fullSentence,
                     ...subsequentSentences
                 ].join(' ').trim();
-                
+
                 return { fullSentence, contextualBlock };
             },
             args: [selectedText, contextSentences]

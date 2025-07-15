@@ -7,8 +7,7 @@
 <body>
     <div class="settings-container">
         <h1 class="text-2xl font-bold mb-4 text-indigo-700">Glossari Settings</h1>
-        
-        <!-- Section for Gemini API Key -->
+
         <div class="settings-section">
             <h2 class="text-lg font-semibold mb-2">Gemini API Key</h2>
             <p class="text-sm text-gray-600 mb-3">Your API key is stored locally and is required for all translation and definition features.</p>
@@ -20,16 +19,12 @@
             <div id="apiKeyStatus" class="mt-2 text-xs text-center"></div>
         </div>
 
-        <!-- Section for Anki Deck Configuration -->
         <div class="settings-section">
             <h2 class="text-lg font-semibold mb-2">Anki Settings</h2>
-            <p class="text-sm text-gray-600 mb-3">Specify the Anki decks for your flashcards. The extension will create these decks if they don't exist.</p>
+            <p class="text-sm text-gray-600 mb-3">Specify the Anki deck for your flashcards. The extension will create this deck if it doesn't exist.</p>
 
-            <label for="sentenceDeckInput" class="block text-gray-700 text-sm font-medium mb-1">Sentence Card Deck:</label>
-            <input type="text" id="sentenceDeckInput" placeholder="e.g., French::Glossari Sentences" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            
-            <label for="vocabDeckInput" class="block text-gray-700 text-sm font-medium mb-1 mt-2">Vocab Card Deck:</label>
-            <input type="text" id="vocabDeckInput" placeholder="e.g., French::Glossari Vocab" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <label for="ankiDeckInput" class="block text-gray-700 text-sm font-medium mb-1">Anki Card Deck:</label>
+            <input type="text" id="ankiDeckInput" placeholder="e.g., Languages::French::Glossari" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
 
             <button id="saveAnkiSettingsBtn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md transition duration-300 ease-in-out shadow-md mt-2">
                 Save Anki Settings
@@ -37,7 +32,6 @@
             <div id="ankiSettingsStatus" class="mt-2 text-xs text-center"></div>
         </div>
 
-        <!-- Section for AI Context Settings -->
         <div class="settings-section">
             <h2 class="text-lg font-semibold mb-2">AI Context Settings</h2>
             <p class="text-sm text-gray-600 mb-3">Control how much surrounding text is sent to the AI for better translation context.</p>
@@ -52,7 +46,6 @@
             <div id="contextSettingsStatus" class="mt-2 text-xs text-center"></div>
         </div>
 
-        <!-- Section for Appearance Settings -->
         <div class="settings-section">
             <h2 class="text-lg font-semibold mb-2">Appearance</h2>
             <div class="theme-switch-wrapper">

@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
                            break;
                         }
                     }
-                    
+
                     if (!value && inputElement.required) {
                         allValid = false;
                         break;
@@ -108,8 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveBtnId: 'saveAnkiSettingsBtn',
         statusDivId: 'ankiSettingsStatus',
         fields: {
-            'sentenceDeck': { inputId: 'sentenceDeckInput', defaultValue: 'Languages::French::n+1', required: true },
-            'vocabDeck': { inputId: 'vocabDeckInput', defaultValue: 'Languages::French::n+1', required: true }
+            'ankiDeck': { inputId: 'ankiDeckInput', defaultValue: 'Languages::French::n+1', required: true } // Unified deck setting
         }
     });
 

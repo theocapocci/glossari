@@ -41,7 +41,7 @@ async function ensureDeckExists(deckName) {
 // =================================================================================
 // GENERIC FLASHCARD CREATION LOGIC
 // =================================================================================
-async function createFlashcard(cardType, deckName, cardData) {
+export async function createFlashcard(cardData, deckName) {
     // Destructure cardData directly
     const { selectedWord, translation, trimmedSentence, fullSentence } = cardData;
 
@@ -52,31 +52,13 @@ async function createFlashcard(cardType, deckName, cardData) {
     }
 
     const sentenceForCard = trimmedSentence || fullSentence;
-    let modelName, fields, tags;
-
-    // --- Logic for the 'Sentence (i+1)' Note Type ---
-    if (cardType === 'sentence') {
-        modelName = "1T (sentence)";
-        fields = {
+    const modelName = "1T";
+    const fields = {
             "Sentence": sentenceForCard,
             "Target": selectedWord,
             "Translation": translation
-        };
-        tags = ["français", "glossari-sentence"];
-
-    // --- Logic for the 'Vocabulary' Note Type ---
-    } else if (cardType === 'vocab') {
-        modelName = "1T (vocab)";
-        fields = {
-            "Target": selectedWord,
-            "Translation": translation,
-            "Sentence": sentenceForCard
-        };
-        tags = ["français", "glossari-vocab"];
-
-    } else {
-        throw new Error(`Invalid card type: ${cardType}`);
-    }
+    };
+    const tags = ["français"];
 
     await addAnkiNote(deckName, modelName, fields, tags);
     return { deck: deckName, word: selectedWord };
@@ -86,12 +68,3 @@ async function createFlashcard(cardType, deckName, cardData) {
 // EXPORTED FLASHCARD CREATION FUNCTIONS
 // =================================================================================
 
-export async function createSentenceFlashcard(cardData, sentenceDeck) {
-    // Pass arguments directly, not in an options object
-    return createFlashcard('sentence', sentenceDeck || 'Languages::French::n+1', cardData);
-}
-
-export async function createVocabFlashcard(cardData, vocabDeck) {
-    // Pass arguments directly, not in an options object
-    return createFlashcard('vocab', vocabDeck || 'Languages::French::n+1', cardData);
-}
