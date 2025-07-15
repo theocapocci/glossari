@@ -107,7 +107,19 @@ function showStatusDisplay(status, message) {
     setTimeout(() => displayDiv.remove(), 7000);
 }
 
+function createButtonGroupHTML(type, label) {
+    // Capitalize the first letter of the type for the ID
+    const capitalizedType = type.charAt(0).toUpperCase() + type.slice(1);
+    return `
+        <div class="glossari-button-group" style="margin-top: 8px;">
+            <button id="glossari-create-${type}-btn">Create ${label} Card</button>
+            <button id="glossari-trim-${type}-btn" title="Trim sentence before creating">✂️</button>
+        </div>
+    `;
+}
+
 function showSelectionActionPanel(selectedWord, selectionDetails) {
+    // Remove any existing panels
     ['glossari-display', 'glossari-activation-popup', 'glossari-selection-panel'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.remove();
@@ -115,21 +127,18 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
 
     const panel = document.createElement('div');
     panel.id = 'glossari-selection-panel';
+
+    // REFACTORED: Use the helper function to build the button groups
     panel.innerHTML = `
         <div class="glossari-panel-header">
             <span>Selected: <strong></strong></span>
             <button id="glossari-panel-close-btn" title="Close">&times;</button>
         </div>
         <div class="glossari-panel-body">
-            <div class="glossari-button-group">
-                <button id="glossari-create-sentence-btn">Create Sentence Card</button>
-                <button id="glossari-trim-sentence-btn" title="Trim sentence before creating">✂️</button>
-            </div>
-            <div class="glossari-button-group" style="margin-top: 8px;">
-                <button id="glossari-create-vocab-btn">Create Vocab Card</button>
-                <button id="glossari-trim-vocab-btn" title="Trim sentence before creating">✂️</button>
-            </div>
+            ${createButtonGroupHTML('sentence', 'Sentence')}
+            ${createButtonGroupHTML('vocab', 'Vocab')}
         </div>`;
+
     panel.querySelector('.glossari-panel-header strong').textContent = selectedWord;
     document.body.appendChild(panel);
 
@@ -141,8 +150,7 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
         });
         panel.remove();
     };
-    
-    // REFACTORED: Helper for trim buttons
+
     const handleTrimClick = (cardType) => {
         chrome.runtime.sendMessage({
             action: "getFullSentence",
@@ -156,14 +164,16 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
         });
     };
 
+    // Event listeners remain largely the same, just targeting the new button IDs
     panel.querySelector('#glossari-create-sentence-btn').addEventListener('click', () => sendMessageAndRemove("createSentenceFlashcard"));
     panel.querySelector('#glossari-create-vocab-btn').addEventListener('click', () => sendMessageAndRemove("createVocabFlashcard"));
-    
+
     panel.querySelector('#glossari-trim-sentence-btn').addEventListener('click', () => handleTrimClick('sentence'));
     panel.querySelector('#glossari-trim-vocab-btn').addEventListener('click', () => handleTrimClick('vocab'));
 
     panel.querySelector('#glossari-panel-close-btn').addEventListener('click', () => panel.remove());
 }
+
 
 async function handleTextSelection(event) {
     if (event.target.closest('#glossari-display, #glossari-selection-panel')) {

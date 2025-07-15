@@ -41,13 +41,6 @@
     "128": "icons/icon128.png"
   },
   "commands": {
-    "send-to-anki": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+A",
-        "mac": "Command+Shift+A"
-      },
-      "description": "Create n+1 flashcard for selected term" 
-    },
     "define-selected-text": {
       "suggested_key": {
         "default": "Ctrl+Shift+D",
