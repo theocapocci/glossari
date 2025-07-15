@@ -1,7 +1,5 @@
 // anki.js
 
-import { callGeminiAPI } from './utils.js';
-
 // =================================================================================
 // ANKI CONNECT HELPERS
 // =================================================================================
@@ -43,51 +41,17 @@ async function ensureDeckExists(deckName) {
 // =================================================================================
 // GENERIC FLASHCARD CREATION LOGIC
 // =================================================================================
-
-async function createFlashcard(options) {
-    const { cardType, cardData, geminiApiKey, deckName } = options;
-    const { selectedWord, contextualBlock, trimmedSentence, fullSentence } = cardData;
+async function createFlashcard(cardType, deckName, cardData) {
+    // Destructure cardData directly
+    const { selectedWord, translation, trimmedSentence, fullSentence } = cardData;
 
     await ensureDeckExists(deckName);
 
-    if (!selectedWord || !(trimmedSentence || fullSentence)) {
-        throw new Error("Cannot create flashcard because the word or sentence is empty.");
+    if (!selectedWord || !translation || !(trimmedSentence || fullSentence)) {
+        throw new Error("Missing required data (word, translation, or sentence) for flashcard creation.");
     }
 
     const sentenceForCard = trimmedSentence || fullSentence;
-
-    // --- Single, Unified API Call ---
-    // This prompt is robust enough for both card types.
-    const aiPrompt = `
-    You are an automated translation service for a flashcard application. Your task is to provide a concise English translation of a given French term based on its use in a sentence. 
-
-    **French Term:** "${selectedWord}"
-    **Sentence:** "${fullSentence}"
-
-    **Instructions:**
-    1.  Provide the most context-appropriate English translation for the term.
-    2.  Your entire response must consist ONLY of the translated text. Do not add any extra words, punctuation, or introductory phrases like "The translation is...".
-    3.  Ensure your translation avoids capitalization, unless the term "${selectedWord}" is at the start "${fullSentence}", or otherwise ought to be capitalized.
-
-    **Context:** "${contextualBlock}"  
-
-    **Examples:**
-    - French Term: 'maison', Sentence: 'La maison est grande!'
-    - Output: house
-
-    - French Term: 'Si vous avez', Sentence: 'Si vous avez un vélo, vous serez heureux.'
-    - Output: If you have
-
-    - French Term: 'vous serez heureux', Sentence: 'Si vous avez un vélo, vous serez heureux.'
-    - Output: you will be happy
-
-    - French Term: 'France', Sentence: 'J'habite en Angleterre.'
-    - Output: England
-    `;
-
-    // We only call the API once, right at the beginning.
-    const translation = await callGeminiAPI(aiPrompt, geminiApiKey);
-
     let modelName, fields, tags;
 
     // --- Logic for the 'Sentence (i+1)' Note Type ---
@@ -96,7 +60,7 @@ async function createFlashcard(options) {
         fields = {
             "Sentence": sentenceForCard,
             "Target": selectedWord,
-            "Translation": translation // Use the result from the single API call
+            "Translation": translation
         };
         tags = ["français", "glossari-sentence"];
 
@@ -105,7 +69,7 @@ async function createFlashcard(options) {
         modelName = "1T (vocab)";
         fields = {
             "Target": selectedWord,
-            "Translation": translation, // Use the result from the single API call
+            "Translation": translation,
             "Sentence": sentenceForCard
         };
         tags = ["français", "glossari-vocab"];
@@ -122,20 +86,12 @@ async function createFlashcard(options) {
 // EXPORTED FLASHCARD CREATION FUNCTIONS
 // =================================================================================
 
-export async function createSentenceFlashcard(cardData, geminiApiKey, sentenceDeck) {
-    return createFlashcard({
-        cardType: 'sentence',
-        cardData,
-        geminiApiKey,
-        deckName: sentenceDeck || 'Glossari Sentences'
-    });
+export async function createSentenceFlashcard(cardData, sentenceDeck) {
+    // Pass arguments directly, not in an options object
+    return createFlashcard('sentence', sentenceDeck || 'Languages::French::n+1', cardData);
 }
 
-export async function createVocabFlashcard(cardData, geminiApiKey, vocabDeck) {
-    return createFlashcard({
-        cardType: 'vocab',
-        cardData,
-        geminiApiKey,
-        deckName: vocabDeck || 'Glossari Vocab'
-    });
+export async function createVocabFlashcard(cardData, vocabDeck) {
+    // Pass arguments directly, not in an options object
+    return createFlashcard('vocab', vocabDeck || 'Languages::French::n+1', cardData);
 }

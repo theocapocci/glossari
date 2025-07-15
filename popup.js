@@ -108,8 +108,8 @@ document.addEventListener('DOMContentLoaded', () => {
         saveBtnId: 'saveAnkiSettingsBtn',
         statusDivId: 'ankiSettingsStatus',
         fields: {
-            'sentenceDeck': { inputId: 'sentenceDeckInput', defaultValue: 'Glossari Sentences', required: true },
-            'vocabDeck': { inputId: 'vocabDeckInput', defaultValue: 'Glossari Vocab', required: true }
+            'sentenceDeck': { inputId: 'sentenceDeckInput', defaultValue: 'Languages::French::n+1', required: true },
+            'vocabDeck': { inputId: 'vocabDeckInput', defaultValue: 'Languages::French::n+1', required: true }
         }
     });
 

@@ -9,6 +9,12 @@ console.log("Glossari background service worker loaded!");
 // SECTION 0: STATE MANAGEMENT & INITIALIZATION
 // =================================================================================
 
+// --- Simple Cache to Store the Last Translation ---
+let lastTranslationCache = {
+    word: null,
+    translation: null
+};
+
 async function updateIcon(isActive) {
     const iconPaths = isActive
         ? { "16": "icons/icon-active16.png", "48": "icons/icon-active48.png", "128": "icons/icon-active128.png" }
@@ -49,19 +55,60 @@ async function handleCardCreation(cardCreator, cardData, tabId) {
 
         const { fullSentence, contextualBlock } = await getTextFromPageForSelection(tabId, cardData.selectedWord, contextSentences, cardData.selectionDetails);
 
+        let translation;
+        // Check cache first
+        if (lastTranslationCache.word === cardData.selectedWord && lastTranslationCache.translation) {
+            translation = lastTranslationCache.translation;
+            console.log("Using cached translation for:", cardData.selectedWord);
+        } else {
+            console.log("Cache stale or empty. Fetching new translation for:", cardData.selectedWord);
+            const aiPrompt = `
+            You are an automated translation service for a flashcard application. Your task is to provide a concise English translation of a given French term based on its use in a sentence. 
+
+            **French Term:** "${cardData.selectedWord}"
+            **Sentence:** "${fullSentence}"
+
+            **Instructions:**
+            1.  Provide the most context-appropriate English translation for the term.
+            2.  Your entire response must consist ONLY of the translated text. Do not add any extra words, punctuation, or introductory phrases like "The translation is...".
+            3.  Ensure your translation avoids capitalization, unless the term "${cardData.selectedWord}" is at the start "${fullSentence}", or otherwise ought to be capitalized.
+
+            **Context:** "${contextualBlock}"  
+
+            **Examples:**
+            - French Term: 'maison', Sentence: 'La maison est grande!'
+            - Output: house
+
+            - French Term: 'Si vous avez', Sentence: 'Si vous avez un vélo, vous serez heureux.'
+            - Output: If you have
+
+            - French Term: 'vous serez heureux', Sentence: 'Si vous avez un vélo, vous serez heureux.'
+            - Output: you will be happy
+
+            - French Term: 'France', Sentence: 'J'habite en Angleterre.'
+            - Output: England
+            `;
+
+            translation = await callGeminiAPI(aiPrompt, geminiApiKey);
+            // Update the cache with the new word and its translation
+            lastTranslationCache = { word: cardData.selectedWord, translation: translation };
+        }
+
         const completeCardData = {
-            selectedWord: cardData.selectedWord,
-            contextualBlock: contextualBlock,
-            fullSentence: fullSentence,
-            trimmedSentence: cardData.trimmedSentence,
+            ...cardData,
+            fullSentence,
+            contextualBlock,
+            translation // Add the translation here
         };
 
         const deckSetting = cardCreator === createSentenceFlashcard ? sentenceDeck : vocabDeck;
-        const result = await cardCreator(completeCardData, geminiApiKey, deckSetting);
+        // The API key is no longer passed to the creator functions
+        const result = await cardCreator(completeCardData, deckSetting);
 
         await sendStatusMessage('success', `Card for "<strong>${result.word}</strong>" created in deck "<strong>${result.deck}</strong>"!`);
     } catch (error) {
         console.error("Glossari Card Creation Error:", error.message);
+        lastTranslationCache = { word: null, translation: null }; // Clear cache on error
         await sendStatusMessage('error', `Error: ${error.message}`);
     }
 }
