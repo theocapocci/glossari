@@ -23,7 +23,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const actions = {
         "updateState": (req) => setGlossariState(req.isActive),
         "showStatus": (req) => showStatusDisplay(req.status, req.message),
-        "showActivationPopup": (req) => showActivationPopup(req.isActive)
+        "showActivationPopup": (req) => showActivationPopup(req.isActive),
+        "myMemoryDefinitionResponse": (req) => {
+            const panel = document.getElementById('glossari-selection-panel');
+            if (panel && panel.querySelector('.glossari-panel-header strong').textContent === req.selectedText) {
+                const definitionDiv = panel.querySelector('.mymemory-definition');
+                if (definitionDiv) {
+                    if (req.error) {
+                        // (3) Graceful and smaller error message for when a definition isn't found.
+                        definitionDiv.innerHTML = `<span style="font-size: 0.8em; color: var(--glossari-label-color);">No definition found.</span>`;
+                    } else {
+                        // Update with the definition if found.
+                        definitionDiv.innerHTML = `${req.definition}`;
+                    }
+                }
+            }
+        }
     };
 
     if (actions[request.action]) {
@@ -128,7 +143,8 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
     const panel = document.createElement('div');
     panel.id = 'glossari-selection-panel';
 
-    // REFACTORED: Use the helper function to build the button groups
+    // (1) MyMemory placeholder is now at the bottom.
+    // (2) It starts with a transparent "loading..." message.
     panel.innerHTML = `
         <div class="glossari-panel-header">
             <span>Selected: <strong></strong></span>
@@ -137,10 +153,18 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
         <div class="glossari-panel-body">
             ${createButtonGroupHTML('sentence', 'Sentence')}
             ${createButtonGroupHTML('vocab', 'Vocab')}
+            <div class="mymemory-definition" style="margin-top: 8px; border-top: 1px solid var(--glossari-border-color); padding-top: 8px;">
+                <span style="opacity: 0.6;">loading...</span>
+            </div>
         </div>`;
 
     panel.querySelector('.glossari-panel-header strong').textContent = selectedWord;
     document.body.appendChild(panel);
+
+    chrome.runtime.sendMessage({
+        action: "getMyMemoryDefinition",
+        selectedText: selectedWord
+    });
 
     const sendMessageAndRemove = (action) => {
         chrome.runtime.sendMessage({

@@ -122,12 +122,25 @@ async function handleDefineMyMemory(selectedText, tabId) {
         if (data.responseStatus !== 200) throw new Error(data.responseDetails || "MyMemory API error.");
         const definition = data.responseData.translatedText;
         if (!definition || definition.toLowerCase() === selectedText.toLowerCase()) {
-            throw new Error(`No distinct definition found for "${selectedText}".`);
+            chrome.tabs.sendMessage(tabId, {
+                action: "myMemoryDefinitionResponse",
+                error: `No distinct definition found for "${selectedText}".`,
+                selectedText: selectedText,
+            });
+            return;
         }
-        await showResultInPage(tabId, selectedText, 'MyMemory', definition); // Use helper
+        chrome.tabs.sendMessage(tabId, {
+            action: "myMemoryDefinitionResponse",
+            definition: definition,
+            selectedText: selectedText,
+        });
     } catch (error) {
         console.error("Glossari Definition Error (MyMemory):", error.message);
-        await sendStatusMessage('error', `Definition Failed: ${error.message}`);
+        chrome.tabs.sendMessage(tabId, {
+            action: "myMemoryDefinitionResponse",
+            error: `Definition Failed: ${error.message}`,
+            selectedText: selectedText
+        });
     }
 }
 
@@ -219,6 +232,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         "getFullSentence": (req) => {
             getTextFromPageForSelection(sender.tab.id, req.selectedWord, 0, req.selectionDetails)
                 .then(result => sendResponse(result.fullSentence));
+            return true;
+        },
+        "getMyMemoryDefinition": (req) => {
+            handleDefineMyMemory(req.selectedText, sender.tab.id);
             return true;
         }
     };
