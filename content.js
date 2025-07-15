@@ -14,6 +14,9 @@ function setGlossariState(isActive) {
         if (isGlossariActive) {
             document.body.removeEventListener('mouseup', handleTextSelection);
             isGlossariActive = false;
+            // Remove any visible Glossari UI elements when deactivated
+            document.getElementById('glossari-selection-panel')?.remove();
+            document.getElementById('glossari-display')?.remove();
         }
     }
 }

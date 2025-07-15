@@ -163,12 +163,13 @@ async function handleTranslateGemini(selectedText, sentenceToTranslate, tabId) {
 // SECTION 2: LISTENERS (EVENTS)
 // =================================================================================
 
+// This listener now handles both clicks on the extension icon and the keyboard shortcut.
 chrome.action.onClicked.addListener(async (tab) => {
     const { isGlossariActive } = await chrome.storage.local.get('isGlossariActive');
     const newState = !isGlossariActive;
     await chrome.storage.local.set({ isGlossariActive: newState });
     await updateIcon(newState);
-    if (tab.id) {
+    if (tab && tab.id) {
         chrome.tabs.sendMessage(tab.id, { action: "updateState", isActive: newState });
         chrome.tabs.sendMessage(tab.id, { action: "showActivationPopup", isActive: newState });
     }
@@ -195,6 +196,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
 });
 
+// MODIFIED: Removed the redundant handler for toggling the extension.
 chrome.commands.onCommand.addListener(async (command, tab) => {
     if (command === "translate-sentence") {
         try {

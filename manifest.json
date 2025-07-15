@@ -41,6 +41,12 @@
     "128": "icons/icon128.png"
   },
   "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+A",
+        "mac": "Command+Shift+A"
+      }
+    },
     "define-selected-text": {
       "suggested_key": {
         "default": "Ctrl+Shift+D",
