@@ -33,11 +33,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const definitionDiv = panel.querySelector('.mymemory-definition');
                 if (definitionDiv) {
                     if (req.error) {
-                        // (3) Graceful and smaller error message for when a definition isn't found.
+                        // Graceful and smaller error message for when a definition isn't found.
                         definitionDiv.innerHTML = `<span style="font-size: 0.8em; color: var(--glossari-label-color);">No definition found.</span>`;
                     } else {
                         // Update with the definition if found.
-                        definitionDiv.innerHTML = `${req.definition}`;
+                        definitionDiv.innerHTML = `≈ ${req.definition}`;
                     }
                 }
             }
@@ -91,7 +91,6 @@ function createDisplayBox(id, headerContent, bodyContent, footerContent) {
     return displayDiv;
 }
 
-// REFACTORED: Generic function to show a card editor
 function showCardEditor(cardType, selectedWord, fullSentence, selectionDetails) {
     const isVocab = cardType === 'vocab';
     const title = isVocab ? 'Trim Vocab Card Sentence' : 'Trim Selection';
@@ -146,8 +145,6 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
     const panel = document.createElement('div');
     panel.id = 'glossari-selection-panel';
 
-    // (1) MyMemory placeholder is now at the bottom.
-    // (2) It starts with a transparent "loading..." message.
     panel.innerHTML = `
         <div class="glossari-panel-header">
             <span>Selected: <strong></strong></span>
@@ -191,7 +188,6 @@ function showSelectionActionPanel(selectedWord, selectionDetails) {
         });
     };
 
-    // Event listeners remain largely the same, just targeting the new button IDs
     panel.querySelector('#glossari-create-sentence-btn').addEventListener('click', () => sendMessageAndRemove("createSentenceFlashcard"));
     panel.querySelector('#glossari-create-vocab-btn').addEventListener('click', () => sendMessageAndRemove("createVocabFlashcard"));
 
