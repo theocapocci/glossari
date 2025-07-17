@@ -69,9 +69,10 @@ async function handleCardCreation(cardData, tabId) {
             **Sentence:** "${fullSentence}"
 
             **Instructions:**
-            1.  Provide the most context-appropriate English translation for the term.
-            2.  Your entire response must consist ONLY of the translated text. Do not add any extra words, punctuation, or introductory phrases like "The translation is...".
-            3.  Ensure your translation avoids capitalization, unless the term "${cardData.selectedWord}" is at the start "${fullSentence}", or otherwise ought to be capitalized.
+            1.  Provide the most context-appropriate English translation for the term "${cardData.selectedWord}".
+            2.  Your entire response must consist ONLY of your translation of the specific term, and none of the surrounding text or context.
+            3.  Do not add any extra words, punctuation, or introductory phrases. 
+            4.  Ensure your translation avoids unnecessary capitalization, unless there is a reason to capitalize (like a proper noun).
 
             **Context:** "${contextualBlock}"
 
@@ -87,6 +88,12 @@ async function handleCardCreation(cardData, tabId) {
 
             - French Term: 'France', Sentence: 'J'habite en Angleterre.'
             - Output: England
+
+            - French Term: 'ralliement', Sentence: 'il y a eu un cri de ralliement.'
+            - Output: rallying
+
+            - French Term: 'rends', Sentence: 'Je vous la rends.'
+            - Output: give backs
             `;
 
             translation = await callGeminiAPI(aiPrompt, geminiApiKey);
